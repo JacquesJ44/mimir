@@ -12,7 +12,7 @@ const navigate = useNavigate();
 const handleSubmit = async e => {
   e.preventDefault();
   try {
-    const response = await axios.post('/mimir/api/login', { email, password });
+    const response = await axios.post('/api/login', { email, password });
     const token = response.data.access_token;
     // console.log(response);
     // console.log(token)

@@ -52,7 +52,7 @@ const Circuits = () => {
             // siteB: siteB,
             status: status,
         };
-       axios.post('/mimir/api/circuits', form, { withCredentials: true })
+       axios.post('/api/circuits', form, { withCredentials: true })
         .then(res => {
             setData(res.data);
             // console.log(res.data);
