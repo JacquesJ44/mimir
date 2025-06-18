@@ -23,57 +23,51 @@ function App() {
 
   return (
     <BrowserRouter>
-    {/* <AuthProvider> */}
-        <div className="App">
-          <Navbar token={token} setToken={setToken} message={message} setMessage={setMessage}/>
-          
-          <div className='content flex justify-center'>
-            <Routes>
-              <Route path='/' element={ token ? <Navigate to="/circuits" /> : <Navigate to="/login" />} />
-              <Route path="/login" element={<Login setToken={setToken} />} />
-              <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/reset-password/:token" element={<ResetPassword />} />
+      <div className="min-h-screen flex flex-col bg-base-200">
+        <Navbar token={token} setToken={setToken} message={message} setMessage={setMessage}/>
+        
+        <div className='flex-grow flex items-center justify-center'>
+          <Routes>
+            <Route path='/' element={ token ? <Navigate to="/circuits" /> : <Navigate to="/login" />} />
+            <Route path="/login" element={<Login setToken={setToken} />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password/:token" element={<ResetPassword />} />
+              
+            <Route path='/sites' element={<PrivateRoute>
+                                      <Sites />
+                                    </PrivateRoute>} />
 
-              {/* <Route path='/logout' element={<PrivateRoute>
-                                        <Logout />
-                                      </PrivateRoute>} /> */}
-                
-              <Route path='/sites' element={<PrivateRoute>
-                                        <Sites />
-                                      </PrivateRoute>} />
+            <Route path='/sites/addsite' element={<PrivateRoute>
+                                      <AddSite />
+                                    </PrivateRoute>} />
 
-              <Route path='/sites/addsite' element={<PrivateRoute>
-                                        <AddSite />
-                                      </PrivateRoute>} />
+            <Route path='/sites/viewsite/:site' element={<PrivateRoute>
+                                      <ViewSite />
+                                    </PrivateRoute>} />
 
-              <Route path='/sites/viewsite/:site' element={<PrivateRoute>
-                                        <ViewSite />
-                                      </PrivateRoute>} />
+            <Route path='/circuits' element={<PrivateRoute>
+                                      <Circuits />
+                                    </PrivateRoute>} />
 
-              <Route path='/circuits' element={<PrivateRoute>
-                                        <Circuits />
-                                      </PrivateRoute>} />
+            <Route path='/circuits/viewcircuit/:id' element={<PrivateRoute>
+                                      <ViewCircuit />
+                                    </PrivateRoute>} />
 
-              <Route path='/circuits/viewcircuit/:id' element={<PrivateRoute>
-                                        <ViewCircuit />
-                                      </PrivateRoute>} />
+            <Route path='/circuits/updatecircuit/:id' element={<PrivateRoute>
+                                      <UpdateCircuit />
+                                    </PrivateRoute>} />
 
-              <Route path='/circuits/updatecircuit/:id' element={<PrivateRoute>
-                                        <UpdateCircuit />
-                                      </PrivateRoute>} />
+            <Route path='/circuits/addcircuit' element={<PrivateRoute>
+                                      <AddCircuit />
+                                    </PrivateRoute>} />
 
-              <Route path='/circuits/addcircuit' element={<PrivateRoute>
-                                        <AddCircuit />
-                                      </PrivateRoute>} />
-
-              <Route path='/register' element={<PrivateRoute>
-                                        <Register />
-                                      </PrivateRoute>} />
-            </Routes>
-          </div> 
-        </div>
-    {/* </AuthProvider> */}
-      </BrowserRouter>
+            <Route path='/register' element={<PrivateRoute>
+                                      <Register />
+                                    </PrivateRoute>} />
+          </Routes>
+        </div> 
+      </div>
+    </BrowserRouter>
   );
 }
 

@@ -23,7 +23,7 @@ const AddSite = () => {
     const handleSubmit = async e => {
         e.preventDefault();
         try {
-          const response = await axios.post('/mimir/api/sites/addsite', { site, reference, latitude, longitude, building, street, number, suburb, city, post, province });
+          const response = await axios.post('/api/sites/addsite', { site, reference, latitude, longitude, building, street, number, suburb, city, post, province });
         //   console.log(response);
           setShowSuccess(true);
           // Wait 1.5 seconds before reloading

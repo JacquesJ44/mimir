@@ -11,7 +11,7 @@ export default function ResetPassword() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-    await axios.post(`/mimir/api/reset-password/${token}`, { new_password: newPassword });
+    await axios.post(`/api/reset-password/${token}`, { new_password: newPassword });
     alert("Password reset successful.");
     navigate("/login");
   } catch (error) {
