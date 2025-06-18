@@ -69,14 +69,14 @@ const AddCircuit = () => {
 
         try {
             // Upload the file first
-            await axios.post('/api/upload', formData, {
+            await axios.post('/mimir/api/upload', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
                 withCredentials: true
             });
             // console.log('Form submitted:', response.data);
             
             // Submit the rest of the form data
-            await axios.post('/api/circuits/addcircuit', {
+            await axios.post('/mimir/api/circuits/addcircuit', {
                 vendor,
                 circuittype: circuitType,
                 speed,

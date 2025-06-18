@@ -31,7 +31,7 @@ db = DbUtil({
 UPLOAD_FOLDER = './docs'
 ALLOWED_EXTENSIONS = set(['pdf'])
 
-app = Flask(__name__, static_url_path="/mimir/static") # Path to your React build folder
+app = Flask(__name__, static_folder='/home/pi/Documents/mimir/mimir-fe/build', static_url_path="/mimir/static") 
 
 # Secret Keys
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
@@ -168,7 +168,7 @@ def send_reset_email(app, email, reset_url):
     # ROUTES
 
 #Login Route
-@app.route('/api/login', methods=['POST'])
+@app.route('/mimir/api/login', methods=['POST'])
 def login():
     if not request.is_json:
         return jsonify({"msg": "Invalid request: JSON required"}), 400
@@ -190,7 +190,7 @@ def login():
     return jsonify(access_token=access_token)
 
 # Route for forgotten password
-@app.route('/api/forgot-password', methods=['POST'])
+@app.route('/mimir/api/forgot-password', methods=['POST'])
 def forgot_password():
     data = request.get_json()
     email = data.get('email')
@@ -209,7 +209,7 @@ def forgot_password():
 
 
 # Route for password reset
-@app.route('/api/reset-password/<token>', methods=['POST'])
+@app.route('/mimir/api/reset-password/<token>', methods=['POST'])
 def reset_password(token):
     data = request.get_json()
     new_password = data.get('new_password')  # Make sure to hash this in production
@@ -226,13 +226,13 @@ def reset_password(token):
     return jsonify({'message': 'Password reset successfully'}), 200
 
 # Logout route
-@app.route("/api/logout", methods=["POST"])
+@app.route("/mimir/api/logout", methods=["POST"])
 def logout():
     response = jsonify({"msg": "logout successful"})
     unset_jwt_cookies(response)
     return response
 
-@app.route('/api/register', methods=['POST'])
+@app.route('/mimir/api/register', methods=['POST'])
 def register():
     data = request.get_json()
     # pprint(data)
@@ -250,7 +250,7 @@ def register():
     return jsonify({"msg": "Registration successful"})
 
 #Navbar route - where authentication takes place
-@app.route("/api/navbar")
+@app.route("/mimir/api/navbar")
 @jwt_required()
 def navbar():
     current_user = get_jwt_identity()
@@ -258,7 +258,7 @@ def navbar():
     # print('current_user: ', current_user)
     return jsonify(logged_in_as=current_user)
 
-@app.route('/api/circuits', methods=['GET', 'POST'])
+@app.route('/mimir/api/circuits', methods=['GET', 'POST'])
 @jwt_required()
 def circuits():
     obj = request.get_json()
@@ -299,7 +299,7 @@ def circuits():
         return jsonify(rows), 200
     return jsonify({"error": "No entries found"}), 404
 
-@app.route('/api/sites', methods=['GET', 'POST'])
+@app.route('/mimir/api/sites', methods=['GET', 'POST'])
 @jwt_required()
 def sites():
     obj = request.get_json()
@@ -318,7 +318,7 @@ def sites():
         return jsonify(rows), 200
     return jsonify({"error": "No entries found"}), 404
         
-@app.route('/api/circuits/addcircuit', methods=['POST'])
+@app.route('/mimir/api/circuits/addcircuit', methods=['POST'])
 @jwt_required()
 def addcircuit():
     data = request.get_json()
@@ -380,7 +380,7 @@ def addcircuit():
         print(f"Database error: {e}")
         return make_response({"error": "Unable to save circuit"}, 500)
 
-@app.route('/api/upload', methods=['POST'])
+@app.route('/mimir/api/upload', methods=['POST'])
 @jwt_required()
 def upload():
     # Ensure upload folder exists
@@ -410,7 +410,7 @@ def upload():
     except Exception as e:
         return make_response(jsonify({"error": f"Failed to save file: {str(e)}"}), 500)
     
-@app.route('/api/sites/addsite', methods=['GET', 'POST'])
+@app.route('/mimir/api/sites/addsite', methods=['GET', 'POST'])
 @jwt_required()
 def addsite():
     obj = request.get_json()
@@ -437,7 +437,7 @@ def addsite():
         )
         return jsonify({"msg": "Site successfully added"}), 200    
         
-@app.route('/api/circuits/viewcircuit/<id>', methods=['GET'])
+@app.route('/mimir/api/circuits/viewcircuit/<id>', methods=['GET'])
 @jwt_required()
 def view_circuit(id):
     data = db.search_circuit_to_view(id)
@@ -446,7 +446,7 @@ def view_circuit(id):
         return jsonify(data)
     return jsonify({'error': 'Circuit not found'}), 404
 
-@app.route('/api/sites/viewsite/<site>', methods=['GET', 'DELETE'])
+@app.route('/mimir/api/sites/viewsite/<site>', methods=['GET', 'DELETE'])
 @jwt_required()
 def view_site(site):
     if request.method == 'GET':
@@ -462,7 +462,7 @@ def view_site(site):
             return jsonify({"msg": "Deleted!"})
         return jsonify({"error": "No site found"}), 404
 
-@app.route('/api/circuits/updatecircuit/<id>', methods=['GET', 'PUT'])
+@app.route('/mimir/api/circuits/updatecircuit/<id>', methods=['GET', 'PUT'])
 @jwt_required()
 def update_circuit(id):
     if request.method == 'GET':
@@ -504,7 +504,7 @@ def update_circuit(id):
             print(f"Database error: {e}")
             return make_response({"error": "Unable to update circuit"}, 500)
 
-@app.route('/api/download/<id>', methods=['GET'])
+@app.route('/mimir/api/download/<id>', methods=['GET'])
 @jwt_required()
 def download(id):
     row = db.search_circuit_to_view(id)
@@ -521,7 +521,7 @@ def download(id):
     else:
         return jsonify({"error": "File not found"}), 404
     
-@app.route('/api/getsite', methods=['POST'])
+@app.route('/mimir/api/getsite', methods=['POST'])
 @jwt_required()
 def get_site():
     data = request.get_json()
@@ -530,8 +530,8 @@ def get_site():
     return jsonify(results)
 
 # This route will serve the React app - this helps for routing in the Production environment
-@app.route("/", defaults={"path": ""})
-@app.route("/<path:path>")
+@app.route("/mimir", defaults={"path": ""})
+@app.route("/mimir/<path:path>")
 def serve(path):
     # Exclude API routes from being caught here
     if path.startswith("api") or path.startswith("static") or path.endswith(('.js', '.css', '.json', '.ico', '.png')):
@@ -548,4 +548,4 @@ def serve(path):
 
 if __name__ == '__main__':
     CORS(app, supports_credentials=True, resource={r"/*": {"origins": "*"}})
-    app.run(debug=True)
+    app.run()

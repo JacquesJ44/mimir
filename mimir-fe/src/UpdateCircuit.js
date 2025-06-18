@@ -24,7 +24,7 @@ const UpdateCircuit = () => {
 
     useEffect(() => {
         window.scrollTo(0, 0);
-        axios.get(`/api/circuits/updatecircuit/${id}`)
+        axios.get(`/mimir/api/circuits/updatecircuit/${id}`)
             .then(res => {
                 const circuit = res.data;
                 // console.log('Fetched circuit status:', circuit.status);
@@ -61,7 +61,7 @@ const UpdateCircuit = () => {
                 formData.append('doc', selectedFile);
 
                 try {
-                    await axios.post('/api/upload', formData, {
+                    await axios.post('/mimir/api/upload', formData, {
                         headers: { 'Content-Type': 'multipart/form-data' },
                         withCredentials: true
                     });
@@ -86,7 +86,7 @@ const UpdateCircuit = () => {
             
             // 3. Save circuit data
             try {
-            const res = await axios.put(`/api/circuits/updatecircuit/${id}`, circuitData, {
+            const res = await axios.put(`/mimir/api/circuits/updatecircuit/${id}`, circuitData, {
                 headers: { 'Content-Type': 'application/json' },
                 withCredentials: true
             });

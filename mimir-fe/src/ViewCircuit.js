@@ -12,7 +12,7 @@ const ViewCircuit = () => {
     useEffect(() => {
         window.scrollTo(0,0)
     
-        axios.get(`/api/circuits/viewcircuit/${id}`)
+        axios.get(`/mimir/api/circuits/viewcircuit/${id}`)
         .then(response => {
           const data = response.data;
             setData(data);
