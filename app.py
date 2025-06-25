@@ -200,7 +200,7 @@ def forgot_password():
     if user:
         token = serializer.dumps(email, salt='password-reset')
         # reset_url = url_for('reset_password', token=token, _external=True)
-        reset_url = f"http://192.168.133.160/reset-password/{token}"
+        reset_url = f"http://192.168.99.218/mimir/reset-password/{token}"
 
         # Launch email sending in a background thread
         Thread(target=send_reset_email, args=(app, email, reset_url)).start()

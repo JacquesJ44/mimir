@@ -35,7 +35,7 @@ const AddCircuit = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        console.log("Site A ID:", siteAId, "Site B ID:", siteBId);
+        // console.log("Site A ID:", siteAId, "Site B ID:", siteBId);
 
         if (!siteAId || !siteBId) {
             alert("Please select valid Site A and Site B options.");
