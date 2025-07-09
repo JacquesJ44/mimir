@@ -6,9 +6,10 @@ import { Building, Type, Hash, User, CalendarDays, MapPin, ToggleRight, ListFilt
 
 const Circuits = () => {
     
-    const vendorOptions = ['DFA', 'Seacom', 'Comsol'];
+    const vendorOptions = ['Ikeja','DFA', 'Seacom', 'Comsol'];
     
     const vendorCircuitTypeMap = {
+        Ikeja: ['DFA Business Broadband', 'DFA Calypte', ' DFA Helios', 'DFA Magellan', 'DFA Peregrine', 'DFA Tachyon', 'DFA Titan'],
         DFA: ['Business Broadband', 'Calypte', 'Helios', 'Magellan', 'Peregrine', 'Tachyon', 'Titan'],
         Seacom: ['EIA', 'BIA'],
         Comsol: ['CX Broadband (PtMP)', 'CX Plus Broadband (PTP)', 'CX Broadband Lite'],

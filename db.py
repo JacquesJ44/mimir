@@ -246,7 +246,8 @@ class DbUtil:
                         circuits.id,
                         circuits.circuitNumber,
                         circuits.circuitOwner,
-                        circuits.endDate, 
+                        circuits.endDate,
+                        circuits.status, 
                         sb.site AS siteB_name 
                     FROM circuits
                     JOIN sites sb ON circuits.siteB = sb.id
@@ -269,7 +270,8 @@ class DbUtil:
                         circuits.id,
                         circuits.circuitNumber,
                         circuits.circuitOwner,
-                        circuits.endDate, 
+                        circuits.endDate,
+                        circuits.status,   
                         sb.site AS siteB_name 
                     FROM circuits
                     JOIN sites sb ON circuits.siteB = sb.id
