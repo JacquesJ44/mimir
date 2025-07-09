@@ -107,9 +107,14 @@ const Register = () => {
               <button className="btn btn-accent">Create User</button>
             </div>
 
-            {/* {error && <p className="text-red-500 mt-2">{error}</p>} */}
-            {/* {success && <p className="text-green-600 mt-2">{success}</p>} */}
-
+            {/* Toast Notification */}
+            {showSuccess && (
+            <div className="toast toast-center toast-top">
+              <div className="alert alert-success shadow-lg">
+              <span>User created successfully!</span>
+              </div>
+            </div>
+            )}
           </form>
         </div>
       </div>

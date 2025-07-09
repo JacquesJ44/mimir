@@ -17,17 +17,18 @@ app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'True').lower() == 'true'
 app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_USERNAME')
-recipient_email = os.getenv('RECIPIENT_EMAIL')
+# recipient_email = os.getenv('RECIPIENT_EMAIL')
+recipient_email = 'jacquesj44@gmail.com'
 
 mail = Mail(app)
 
 def format_circuit_email(expiring_circuits, expired_circuits):
     expiring_lines = [
-        f"ID: {c['id']}, Number: {c['circuitNumber']}, Owner: {c['circuitOwner']}, Site B: {c['siteB_name']}, End Date: {c['endDate']}"
+        f"ID: {c['id']} \n Circuit Number: {c['circuitNumber']} \n Owner: {c['circuitOwner']} \n Site B: {c['siteB_name']} \n End Date: {c['endDate']} \n Status: {c['status']} \n"
         for c in expiring_circuits
     ]
     expired_lines = [
-        f"ID: {c['id']}, Number: {c['circuitNumber']}, Owner: {c['circuitOwner']}, Site B: {c['siteB_name']}, End Date: {c['endDate']}"
+        f"ID: {c['id']} \n Circuit Number: {c['circuitNumber']} \n Owner: {c['circuitOwner']} \n Site B: {c['siteB_name']} \n End Date: {c['endDate']} \n Status: {c['status']} \n"
         for c in expired_circuits
     ]
 
