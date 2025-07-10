@@ -310,7 +310,7 @@ const AddCircuit = () => {
                                                     circuitOwner === 'Aesir' ? 'text-blue-600' : 'text-gray-400'
                                                     }`}>
                                                     <img
-                                                        src="aesirblue.png"
+                                                        src="/mimir/aesirblue.png"
                                                         alt="Aesir Logo"
                                                         className="h-8 object-contain" />
                                                 </span>
@@ -319,7 +319,7 @@ const AddCircuit = () => {
                                                     circuitOwner === 'Ikeja' ? 'text-green-600' : 'text-gray-400'
                                                     }`}>
                                                     <img
-                                                        src="ikejalogo1.png"
+                                                        src="/mimir/ikejalogo1.png"
                                                         alt="Ikeja Logo"
                                                         className="h-5 object-contain" />
                                                 </span>

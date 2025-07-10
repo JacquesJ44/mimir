@@ -1,7 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import axios from './AxiosInstance.js';
-import logo from './aesirblue.png';
 
 const Navbar = ({ token, setToken, message, setMessage }) => {
 
@@ -53,7 +52,7 @@ const Navbar = ({ token, setToken, message, setMessage }) => {
     return (
         <div className="navbar shadow-2xl bg-base-200 roundedborders">
         <div className="flex-1">
-            <img src={logo} className="App-logo" alt="logo" />
+            <img src="/aesirblue.png" className="App-logo" alt="logo" />
         </div>
 
         <div className="flex-none">
