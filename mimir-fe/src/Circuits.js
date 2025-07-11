@@ -6,8 +6,9 @@ import { Building, Hash, User, CalendarDays, MapPin, ToggleRight, ListFilter, Pl
 
 const Circuits = () => {
     
+
     const vendorOptions = ['Ikeja', 'DFA', 'Seacom', 'Comsol'];
-    
+  
     const vendorCircuitTypeMap = {
         Ikeja: ['DFA Business Broadband', 'DFA Calypte', ' DFA Helios', 'DFA Magellan', 'DFA Peregrine', 'DFA Tachyon', 'DFA Titan'],
         DFA: ['Business Broadband', 'Calypte', 'Helios', 'Magellan', 'Peregrine', 'Tachyon', 'Titan'],
@@ -63,7 +64,7 @@ const Circuits = () => {
             enni: enni,
             status: status,
         };
-       axios.post('/api/circuits', form, { withCredentials: true })
+       axios.post('/mimir/api/circuits', form, { withCredentials: true })
         .then(res => {
             setData(res.data);
             // console.log(res.data);

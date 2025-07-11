@@ -14,7 +14,7 @@ const Navbar = ({ token, setToken, message, setMessage }) => {
         setMessage("No token found")
         return;
       }
-      axios.get('/api/navbar', {
+      axios.get('/mimir/api/navbar', {
         headers: {
           Authorization: `Bearer ${storedToken}`
         }
@@ -35,7 +35,7 @@ const Navbar = ({ token, setToken, message, setMessage }) => {
     const handleLogout = async () => {
         try {
           // Optionally notify the backend
-          await axios.post('/api/logout', {}, { withCredentials: true });
+          await axios.post('/mimir/api/logout', {}, { withCredentials: true });
     
           // Clear local token
           localStorage.removeItem('token');
@@ -52,7 +52,9 @@ const Navbar = ({ token, setToken, message, setMessage }) => {
     return (
         <div className="navbar shadow-2xl bg-base-200 roundedborders">
         <div className="flex-1">
-            <img src="/aesirblue.png" className="App-logo" alt="logo" />
+
+            <img src="/mimir/aesirblue.png" className="App-logo" alt="logo" />
+
         </div>
 
         <div className="flex-none">

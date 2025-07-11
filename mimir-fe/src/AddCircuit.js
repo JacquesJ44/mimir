@@ -69,14 +69,14 @@ const AddCircuit = () => {
 
         try {
             // Upload the file first
-            await axios.post('/api/upload', formData, {
+            await axios.post('/mimir/api/upload', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
                 withCredentials: true
             });
             // console.log('Form submitted:', response.data);
             
             // Submit the rest of the form data
-            await axios.post('/api/circuits/addcircuit', {
+            await axios.post('/mimir/api/circuits/addcircuit', {
                 vendor,
                 circuittype: circuitType,
                 speed,
@@ -314,7 +314,7 @@ const AddCircuit = () => {
                                                     circuitOwner === 'Aesir' ? 'text-blue-600' : 'text-gray-400'
                                                     }`}>
                                                     <img
-                                                        src="/aesirblue.png"
+                                                        src="/mimir/aesirblue.png"
                                                         alt="Aesir Logo"
                                                         className="h-8 object-contain" />
                                                 </span>
@@ -323,7 +323,7 @@ const AddCircuit = () => {
                                                     circuitOwner === 'Ikeja' ? 'text-green-600' : 'text-gray-400'
                                                     }`}>
                                                     <img
-                                                        src="/ikejalogo1.png"
+                                                        src="/mimir/ikejalogo1.png"
                                                         alt="Ikeja Logo"
                                                         className="h-5 object-contain" />
                                                 </span>
