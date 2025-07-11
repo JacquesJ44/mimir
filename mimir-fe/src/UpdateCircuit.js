@@ -78,6 +78,8 @@ const UpdateCircuit = () => {
                 startDate,
                 contractTerm,
                 endDate,
+                enni,
+                vlan,
                 mrc,
                 comments,
                 status,
@@ -94,6 +96,9 @@ const UpdateCircuit = () => {
             if (res.status === 200) {
                 setShowSuccess(true);
                 setTimeout(() => navigate('/circuits'), 1500);
+            } else if (res.status === 204) {
+                // No changes made, maybe just show info or silently proceed
+                console.log('No changes made to the circuit.');
             }
         } catch (err) {
             console.error('Failed to update circuit:', err);

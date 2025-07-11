@@ -2,21 +2,31 @@ import axios from "./AxiosInstance.js";
 import { useState } from "react";
 import { Link } from 'react-router-dom';
 import moments from "moment";
-import { Building, Type, Hash, User, CalendarDays, MapPin, ToggleRight, ListFilter, Plus } from 'lucide-react';
+import { Building, Hash, User, CalendarDays, MapPin, ToggleRight, ListFilter, Plus, Cable, Microchip } from 'lucide-react';
 
 const Circuits = () => {
     
-    const vendorOptions = ['Ikeja','DFA', 'Seacom', 'Comsol'];
+    const vendorOptions = ['Ikeja', 'DFA', 'Seacom', 'Comsol'];
     
     const vendorCircuitTypeMap = {
         Ikeja: ['DFA Business Broadband', 'DFA Calypte', ' DFA Helios', 'DFA Magellan', 'DFA Peregrine', 'DFA Tachyon', 'DFA Titan'],
         DFA: ['Business Broadband', 'Calypte', 'Helios', 'Magellan', 'Peregrine', 'Tachyon', 'Titan'],
-        Seacom: ['EIA', 'BIA'],
+        Seacom: ['EIA via DFA Helios', 'EIA via MTB', 'EIA via Openserve', 'EIA via Other', 'BIA via MTB', 'BIA via Octotel', 'BIA via Openserve', 'BIA via VO Connect', 'BIA via Other'],
         Comsol: ['CX Broadband (PtMP)', 'CX Plus Broadband (PTP)', 'CX Broadband Lite'],
         default: ['']
     }
 
     const circuitOwners = ['Aesir', 'Ikeja']
+
+    const ennis = [
+        {label: "ENI21-0000123", value: "ENI21-0000123"},
+        {label: "ENI11-0001059", value: "ENI11-0001059"},
+        {label: "ENI11-0001107", value: "ENI11-0001107"},
+        {label: "ENI11-0001122", value: "ENI11-0001122"},
+        {label: "ENI21-0006085", value: "ENI21-0006085"},
+        {label: "ENI11-0006137", value: "ENI11-0006137"},
+        {label: "GNI21-0000071", value: "GNI21-0000071"},
+    ]
 
     const today = moments(new Date());
     // const [services, setServices] = useState([]);
@@ -33,7 +43,7 @@ const Circuits = () => {
     const [circuitNumber, setCircuitNumber] = useState('');
     const [endDate, setEndDate] = useState('');
     const [site, setSite] = useState('');
-    // const [siteB, setSiteB] = useState('');
+    const [enni, setEnni] = useState('');
     const [status, setStatus] = useState('');
     
     const contract_status = ['Active', 'Cancelled', 'Cancelling']
@@ -50,7 +60,7 @@ const Circuits = () => {
             circuitOwner: circuitOwner,
             endDate: endDate,
             site: site,
-            // siteB: siteB,
+            enni: enni,
             status: status,
         };
        axios.post('/api/circuits', form, { withCredentials: true })
@@ -103,7 +113,6 @@ const Circuits = () => {
                                 </option>
                             ))}
                             </select>
-                            {/* <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} /> */}
                         </div>
                     </div>
 
@@ -113,7 +122,7 @@ const Circuits = () => {
                             <span className="label-text text-white">Circuit Type</span>
                         </label> */}
                         <div className="relative">
-                            <Type className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                            <Microchip className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                             <select
                             className="select select-bordered w-full rounded-md shadow-sm pl-10 appearance-none"
                             value={circuitType}
@@ -126,7 +135,6 @@ const Circuits = () => {
                                 </option>
                             ))}
                             </select>
-                            {/* <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} /> */}
                         </div>
                     </div>
 
@@ -166,11 +174,10 @@ const Circuits = () => {
                                 </option>
                             ))}
                             </select>
-                            {/* <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} /> */}
                         </div>
                     </div>
 
-                    {/* Start Date */}
+                    {/* End Date */}
                     <div className="form-control">
                         {/* <label className="label">
                             <span className="label-text text-white">Start Date</span>
@@ -188,17 +195,8 @@ const Circuits = () => {
 
                     {/* Site A */}
                     <div className="form-control">
-                        {/* <label className="label">
-                            <span className="label-text text-white">Site A</span>
-                        </label> */}
                         <div className="relative">
                             <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                            {/* <SiteSelector
-                                        label="Site A"
-                                        value={siteA}
-                                        setValue={setSiteA}
-                                        setId={setSiteAId}
-                                    /> */}
                             <input
                             className="input input-bordered w-full rounded-md shadow-sm pl-10"
                             type="text"
@@ -209,18 +207,24 @@ const Circuits = () => {
                         </div>
                     </div>
 
-                    {/* <div className="form-control">
-                        <label className="label">
-                            <span className="label-text">Site B</span>    
-                        </label>
-                        <input className="input input-bordered w-full rounded-md shadow-sm"
-                            type="text" 
-                            placeholder="Site B"
-                            // required
-                            value = { siteB }
-                            onChange={(e) => setSiteB(e.target.value)} 
-                        />
-                    </div> */}
+                    {/* Enni Dropdown */}
+                    <div className="form-control">
+                        <div className="relative">
+                            <Cable className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                            <select
+                            className="select select-bordered w-full rounded-md shadow-sm pl-10 appearance-none"
+                            value={enni}
+                            onChange={(e) => setEnni(e.target.value)}
+                            >
+                            <option value="">Choose ENNI...</option>
+                            {ennis.map((e, idx) => (
+                                <option key={idx} value={e.value}>
+                                {e.label}
+                                </option>
+                            ))}
+                            </select>
+                        </div>
+                    </div>
                 
                     {/* Status */}
                     <div className="form-control">
@@ -263,12 +267,14 @@ const Circuits = () => {
                     <th>Circuit Type</th>
                     <th>Speed</th>
                     <th>Circuit Number</th>
+                    <th>ENNI</th>
                     <th>Circuit Owner</th>
-                    <th>Start Date</th>
+                    <th>VLAN</th>
+                    {/* <th>Start Date</th> */}
                     {/* <th>Contract Term</th> */}
                     <th>End Date</th>
                     {/* <th>Monthly Recurring Cost (ex VAT)</th> */}
-                    <th>Site A</th>
+                    {/* <th>Site A</th> */}
                     <th>Site B</th>
                     {/* <th>Comments</th> */}
                     {/* <th>Handover Doc</th> */}
@@ -303,18 +309,20 @@ const Circuits = () => {
                         <td>{c.circuitType}</td> 
                         <td>{c.speed}</td> 
                         <td>{c.circuitNumber}</td>
+                        <td>{c.enni}</td>
                         <td>{c.circuitOwner}</td>
-                        <td>{c.startDate ?
+                        <td>{c.vlan}</td>
+                        {/* <td>{c.startDate ?
                             new Date(c.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) 
                             : 'N/A'}
-                        </td> 
+                        </td>  */}
                         {/* <td>{c.contractTerm}</td>  */}
                         <td>{c.endDate ?
                             new Date(c.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) 
                             : 'N/A'}
                         </td> 
                         {/* <td>{c.mrc}</td> */}
-                        <td>{c.siteA_name}</td> 
+                        {/* <td>{c.siteA_name}</td>  */}
                         <td>{c.siteB_name}</td>
                         {/* <td>{c.comments}</td> */}
                         {/* <td>{c.doc}</td>  */}

@@ -35,7 +35,7 @@ const AddCircuit = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        console.log("Site A ID:", siteAId, "Site B ID:", siteBId);
+        // console.log("Site A ID:", siteAId, "Site B ID:", siteBId);
 
         if (!siteAId || !siteBId) {
             alert("Please select valid Site A and Site B options.");
@@ -113,8 +113,12 @@ const AddCircuit = () => {
         }
     };
     
-    // Setting Vendor and CircuitType variables for selection in cascading style, followed by fundtions to set in the form defined above 
+    // Setting Vendor and CircuitType variables for selection in cascading style, followed by functions to set in the form defined above 
     const vendors = [
+        {
+            vendor: 'Ikeja',
+            type: ['DFA Business Broadband', 'DFA Calypte', ' DFA Helios', 'DFA Magellan', 'DFA Peregrine', 'DFA Tachyon', 'DFA Titan']
+        },
         {
             vendor: 'DFA',
             type: ['Business Broadband', 'Calypte', 'Helios', 'Magellan', 'Peregrine', 'Tachyon', 'Titan']
@@ -122,7 +126,7 @@ const AddCircuit = () => {
         },
         {
             vendor: 'Seacom',
-            type: ['EIA', 'BIA']
+            type: ['EIA via DFA Helios', 'EIA via MTB', 'EIA via Openserve', 'EIA via Other', 'BIA via MTB', 'BIA via Octotel', 'BIA via Openserve', 'BIA via VO Connect', 'BIA via Other']
         },
         {
             vendor: 'Comsol',
@@ -330,7 +334,7 @@ const AddCircuit = () => {
                             </div>
 
                             {/* Row 2 - Display only if Vendor is set to 'DFA' */}
-                            { (vendor === 'DFA') &&
+                            { (vendor === 'DFA' || vendor === 'Ikeja') &&
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                                 <div className="form-control">
                                     <label htmlFor="enni" className="label">
