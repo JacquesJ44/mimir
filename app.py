@@ -274,8 +274,7 @@ def circuits():
             sb.site AS siteB_name 
         FROM circuits
         JOIN sites sa ON circuits.siteA = sa.id
-        JOIN sites sb ON circuits.siteB = sb.id
-        WHERE 
+        JOIN sites sb ON circuits.siteB = sb.id 
     '''
     filters = []
     values = []
@@ -292,7 +291,12 @@ def circuits():
                 filters.append(f"{key} LIKE %s")
                 values.append(f"%{value}%")
 
-    query += " AND ".join(filters)
+    # Add WHERE clause only if filters exist
+    if filters:
+        query += " WHERE " + " AND ".join(filters)
+
+    # Always add ORDER BY
+    query += " ORDER BY CAST(SUBSTRING(vlan, 2) AS UNSIGNED) DESC"
 
     rows = db.search_similar_circuit(query, tuple(values))
     if rows:
@@ -462,6 +466,7 @@ def view_site(site):
             return jsonify({"msg": "Deleted!"})
         return jsonify({"error": "No site found"}), 404
 
+
 @app.route('/mimir/api/circuits/updatecircuit/<id>', methods=['GET', 'PUT'])
 @jwt_required()
 def update_circuit(id):
@@ -497,9 +502,10 @@ def update_circuit(id):
         try:
             success = db.update_circuit(id, **data)
             if success > 0:
+                # return '', 204  # No Content response
                 return jsonify({'message': 'Circuit updated successfully'}), 200
             else:
-                return jsonify({'error': 'No changes made'}), 404
+                return jsonify({'error': 'No changes made'}), 200
         except Exception as e:
             print(f"Database error: {e}")
             return make_response({"error": "Unable to update circuit"}, 500)

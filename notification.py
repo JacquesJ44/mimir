@@ -17,28 +17,60 @@ app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'True').lower() == 'true'
 app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_USERNAME')
+
 recipient_email = os.getenv('RECIPIENT_EMAIL')
-# recipient_email = 'jacquesj44@gmail.com'
+
 
 mail = Mail(app)
 
 def format_circuit_email(expiring_circuits, expired_circuits):
-    expiring_lines = [
-        f"ID: {c['id']} \n Circuit Number: {c['circuitNumber']} \n Owner: {c['circuitOwner']} \n Site B: {c['siteB_name']} \n End Date: {c['endDate']} \n Status: {c['status']} \n"
-        for c in expiring_circuits
-    ]
-    expired_lines = [
-        f"ID: {c['id']} \n Circuit Number: {c['circuitNumber']} \n Owner: {c['circuitOwner']} \n Site B: {c['siteB_name']} \n End Date: {c['endDate']} \n Status: {c['status']} \n"
-        for c in expired_circuits
-    ]
+    # Define a header row
+    header = f"{'ID':<5} {'Circuit Number':<30} {'Owner':<15} {'Site B':<40} {'End Date':<15} {'Status':<10}"
+
+    def format_rows(circuits):
+        return [
+            f"{c['id']:<5} {c['circuitNumber']:<30} {c['circuitOwner']:<15} {c['siteB_name']:<40} {c['endDate'].strftime('%Y-%m-%d'):<15} {c['status']:<10}"
+            for c in circuits
+        ]
 
     message = "Circuits expiring within 5 months:\n\n"
-    message += "\n".join(expiring_lines) if expiring_lines else "None\n"
+    if expiring_circuits:
+        message += header + "\n" + "-" * len(header) + "\n"
+        message += "\n".join(format_rows(expiring_circuits))
+    else:
+        message += "None"
 
-    message += "\n\nCircuits out of contract:\n\n"
-    message += "\n".join(expired_lines) if expired_lines else "None\n"
+    message += "\n\n\nCircuits out of contract:\n\n"
+    if expired_circuits:
+        message += header + "\n" + "-" * len(header) + "\n"
+        message += "\n".join(format_rows(expired_circuits))
+    else:
+        message += "None"
 
     return message
+
+# def format_circuit_email(expiring_circuits, expired_circuits):
+
+#     # Define a header row
+#     header = f"{'ID':<5} {'Circuit Number':<18} {'Owner':<15} {'Site B':<20} {'End Date':<12} {'Status':<10}"
+    
+#     expiring_lines = [
+
+#         f"ID: {c['id']} \n Circuit Number: {c['circuitNumber']} \n Owner: {c['circuitOwner']} \n Site B: {c['siteB_name']} \n End Date: {c['endDate']} \n Status: {c['status']} \n"
+#         for c in expiring_circuits
+#     ]
+#     expired_lines = [
+#         f"ID: {c['id']} \n Circuit Number: {c['circuitNumber']} \n Owner: {c['circuitOwner']} \n Site B: {c['siteB_name']} \n End Date: {c['endDate']} \n Status: {c['status']} \n"
+#         for c in expired_circuits
+#     ]
+
+#     message = "Circuits expiring within 5 months:\n\n"
+#     message += "\n".join(expiring_lines) if expiring_lines else "None\n"
+
+#     message += "\n\nCircuits out of contract:\n\n"
+#     message += "\n".join(expired_lines) if expired_lines else "None\n"
+
+#     return message
 
 def main():
     db = DbUtil({
