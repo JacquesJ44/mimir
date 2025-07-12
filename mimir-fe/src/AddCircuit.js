@@ -49,7 +49,7 @@ const AddCircuit = () => {
         formData.append('speed', speed);
         formData.append('circuitNumber', circuitNumber);
         formData.append('circuitOwner', circuitOwner);
-        if (vendor === 'DFA') {
+        if (vendor === 'DFA' || vendor === 'Ikeja') {
             formData.append('enni', enni);
             formData.append('vlan', vlan);
         }
@@ -82,8 +82,8 @@ const AddCircuit = () => {
                 speed,
                 circuitNumber,
                 circuitOwner,
-                enni: vendor === 'DFA' ? enni : null,
-                vlan: vendor === 'DFA' ? vlan : null,
+                enni: vendor === 'DFA' || vendor === 'Ikeja' ? enni : null,
+                vlan: vendor === 'DFA' || vendor === 'Ikeja' ? vlan : null,
                 startDate,
                 contractTerm,
                 endDate,

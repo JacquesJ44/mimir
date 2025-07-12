@@ -219,7 +219,7 @@ const UpdateCircuit = () => {
                             </div>
 
                         {/* Display only if Vendor is set to 'DFA' */}
-                        { (data.vendor === 'DFA') &&
+                        { (data.vendor === 'DFA' || data.vendor === 'Ikeja') &&
                         <>
                             <div className="form-control">
                                 <label htmlFor="enni" className="label">
