@@ -11,7 +11,7 @@ const ViewSite = () => {
     useEffect(() => {
         window.scrollTo(0,0)
     
-        axios.get(`/api/sites/viewsite/${site}`)
+        axios.get(`/mimir/api/sites/viewsite/${site}`)
         .then(response => {
           const data = response.data;
             setData(data);
@@ -28,7 +28,7 @@ const ViewSite = () => {
         if (!confirmed) return;
 
         try {
-          const response = await axios.delete(`/api/sites/viewsite/${site}`);
+          const response = await axios.delete(`/mimir/api/sites/viewsite/${site}`);
           if (response.data.msg === "Deleted!") {
             alert("Site deleted successfully.");
             navigate("/sites");
