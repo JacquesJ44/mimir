@@ -180,7 +180,7 @@ const AddCircuit = () => {
                 formData.append('doc', selectedFile);
 
                 try {
-                    await axios.post('/api/upload', formData, {
+                    await axios.post('/mimir/api/upload', formData, {
                         headers: { 'Content-Type': 'multipart/form-data' },
                             withCredentials: true
                     });

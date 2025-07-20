@@ -297,7 +297,7 @@ def navbar():
     # print('current_user: ', current_user)
     return jsonify(logged_in_as=current_user)
 
-@app.route("/api/dashboard", methods=["GET"])
+@app.route("/mimir/api/dashboard", methods=["GET"])
 @jwt_required()
 def circuits_grouped_by_vendor_and_type():
     # print("🚀 API HIT: /api/dashboard")
