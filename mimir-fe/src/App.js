@@ -15,6 +15,7 @@ import ViewSite from './ViewSite';
 import ViewCircuit from './ViewCircuit';
 import UpdateCircuit from './UpdateCircuit';
 import Register from './Register';
+import Dashboard from './Dashboard';
 
 function App() {
 
@@ -33,6 +34,10 @@ function App() {
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password/:token" element={<ResetPassword />} />
               
+            <Route path='/dashboard' element={<PrivateRoute>
+                                      <Dashboard />
+                                    </PrivateRoute>} />
+
             <Route path='/sites' element={<PrivateRoute>
                                       <Sites />
                                     </PrivateRoute>} />

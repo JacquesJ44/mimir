@@ -59,6 +59,7 @@ const Navbar = ({ token, setToken, message, setMessage }) => {
           <ul className="menu menu-horizontal px-1">
              {token ? (
                <>
+                <li className="mx-2"><Link to="/dashboard">Dashboard</Link></li>
                 <li className="mx-2"><Link to="/circuits">Circuits</Link></li>
                 <li className="mx-2"><Link to="/sites">Sites</Link></li>
                 <li className="mx-2"><Link to="/register">Register New User</Link></li>

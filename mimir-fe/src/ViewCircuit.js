@@ -41,7 +41,8 @@ const ViewCircuit = () => {
                 <div className="mt-5 md:mt-0 md:col-span-2 text-left">
                   <strong>{data.vendor} | {data.circuitType}</strong>
                   <div className="mt-5 md:mt-0 md:col-span-2 text-left"> 
-                    <strong>Circuit Number:  </strong> { data.circuitNumber }<br/> 
+                    <strong>Circuit Number:  </strong> { data.circuitNumber }<br/>
+                    <strong>Circuit Owner:  </strong> { data.circuitOwner }<br/> 
                     <strong>Speed:  </strong>{ data.speed }<br/>
                     <strong>ENNI:  </strong>{ data.enni }<br/>
                     <strong>VLAN ID:  </strong>{ data.vlan }<br/>
@@ -55,6 +56,7 @@ const ViewCircuit = () => {
                     <strong>Site A:  </strong>{ data.siteA_name }<br/>
                     <strong>Site B:  </strong>{ data.siteB_name }<br/>
                     <strong>MRC:  </strong>R{ data.mrc }<br/>
+                    <strong>Selling Price:  </strong>R{ data.sellingPrice }<br/>
                     <strong>Comments:  </strong>{ data.comments }<br/>
                     <strong>Status:  </strong>{ data.status }<br/>
                     <strong>Document:

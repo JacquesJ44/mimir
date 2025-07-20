@@ -48,29 +48,6 @@ def format_circuit_email(expiring_circuits, expired_circuits):
 
     return message
 
-# def format_circuit_email(expiring_circuits, expired_circuits):
-
-#     # Define a header row
-#     header = f"{'ID':<5} {'Circuit Number':<18} {'Owner':<15} {'Site B':<20} {'End Date':<12} {'Status':<10}"
-    
-#     expiring_lines = [
-
-#         f"ID: {c['id']} \n Circuit Number: {c['circuitNumber']} \n Owner: {c['circuitOwner']} \n Site B: {c['siteB_name']} \n End Date: {c['endDate']} \n Status: {c['status']} \n"
-#         for c in expiring_circuits
-#     ]
-#     expired_lines = [
-#         f"ID: {c['id']} \n Circuit Number: {c['circuitNumber']} \n Owner: {c['circuitOwner']} \n Site B: {c['siteB_name']} \n End Date: {c['endDate']} \n Status: {c['status']} \n"
-#         for c in expired_circuits
-#     ]
-
-#     message = "Circuits expiring within 5 months:\n\n"
-#     message += "\n".join(expiring_lines) if expiring_lines else "None\n"
-
-#     message += "\n\nCircuits out of contract:\n\n"
-#     message += "\n".join(expired_lines) if expired_lines else "None\n"
-
-#     return message
-
 def main():
     db = DbUtil({
         'host': os.getenv('DB_HOST'),
