@@ -14,7 +14,7 @@ const AddCircuit = () => {
     const [circuitTypes, setCircuitTypes] = useState([]);
 
     useEffect(() => {
-        fetch("/circuit-options.json")
+        fetch("/mimir/circuit-options.json")
             .then((res) => res.json())
             .then((data) => {
             setVendors(data.vendors);
@@ -101,6 +101,7 @@ const AddCircuit = () => {
         }
         
         const fileInput = document.getElementById('formFile');
+        const selectedFile = fileInput?.files?.[0];
 
         const formData = new FormData();
         formData.append('vendor', vendor);

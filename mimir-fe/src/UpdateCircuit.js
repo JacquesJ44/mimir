@@ -11,7 +11,7 @@ const UpdateCircuit = () => {
     const [ennis, setEnnis] = useState([]);
 
     useEffect(() => {
-        fetch("/circuit-options.json")
+        fetch("/mimir/circuit-options.json")
             .then((res) => res.json())
             .then((data) => {
             setSpeeds(data.speeds);
