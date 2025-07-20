@@ -1,6 +1,6 @@
 from flask import Flask
 from flask import jsonify, request, make_response, send_file, send_from_directory
-from flask_jwt_extended import create_access_token,get_jwt,get_jwt_identity, unset_jwt_cookies, jwt_required, JWTManager
+from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, unset_jwt_cookies, jwt_required, JWTManager
 from flask_cors import CORS
 from flask_mail import Mail, Message
 from dotenv import load_dotenv
@@ -13,10 +13,12 @@ import hashlib
 import binascii
 import json
 import os
+import re
 
 from pprint import pprint
 
 from db import DbUtil
+from utils import describe_changes_log
 
 # Load variables from .env
 load_dotenv()
@@ -30,6 +32,7 @@ db = DbUtil({
 
 UPLOAD_FOLDER = './docs'
 ALLOWED_EXTENSIONS = set(['pdf'])
+DECIMAL_PATTERN = re.compile(r'^\d+(\.\d{1,2})?$')
 
 app = Flask(__name__, static_folder='/home/pi/Documents/mimir/mimir-fe/build', static_url_path="/mimir/static") 
 
@@ -48,7 +51,6 @@ app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_USERNAME')
 app.config['RECIPIENT_EMAIL'] = os.getenv('RECIPIENT_EMAIL')
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-
 
 serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
 
@@ -72,11 +74,11 @@ cur.execute("""
         id INT(5) PRIMARY KEY AUTO_INCREMENT,
         site VARCHAR(50) UNIQUE,
         reference VARCHAR(50),
-        latitude VARCHAR(30),
-        longitude VARCHAR(30),
+        latitude VARCHAR(50),
+        longitude VARCHAR(50),
         building VARCHAR(100),
         street VARCHAR(50),
-        number VARCHAR(5),
+        number VARCHAR(20),
         suburb VARCHAR(30),
         city VARCHAR(30),
         postcode VARCHAR(10),
@@ -89,7 +91,7 @@ cur.execute("""
         vendor VARCHAR(30),
         circuitType VARCHAR(50),
         speed VARCHAR(20),
-        circuitNumber VARCHAR(50),
+        circuitNumber VARCHAR(100),
         circuitOwner VARCHAR(30),
         enni VARCHAR(15),
         vlan VARCHAR(15),
@@ -97,6 +99,7 @@ cur.execute("""
         contractTerm VARCHAR(15),
         endDate DATE,
         mrc DECIMAL(10,2),
+        sellingPrice DECIMAL(10,2),
         siteA INT,
         siteB INT,
         comments VARCHAR(1000),
@@ -106,6 +109,21 @@ cur.execute("""
         FOREIGN KEY (siteB) REFERENCES sites(id) ON DELETE RESTRICT ON UPDATE CASCADE
     )
 """)
+
+cur.execute("""
+    CREATE TABLE IF NOT EXISTS user_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id VARCHAR(150) NOT NULL,
+    action VARCHAR(255) NOT NULL,
+    target_table VARCHAR(100),
+    target_id INT,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    details TEXT
+    )
+""")
+
 con.close()
 
 # Hash the password
@@ -165,6 +183,15 @@ def send_reset_email(app, email, reset_url):
         except Exception as e:
             print("Failed to send email:", e)
 
+def validate_decimal_field(value, field_name):
+    if not isinstance(value, str):
+        value = str(value)
+
+    if not DECIMAL_PATTERN.match(value):
+        raise ValueError(f"{field_name} is not a valid decimal")
+
+    return f"{float(value):.2f}"
+
     # ROUTES
 
 #Login Route
@@ -186,6 +213,18 @@ def login():
         return jsonify({"msg": "Invalid credentials"}), 401
     
     access_token = create_access_token(identity=data['email'])
+
+     # ✅ Log the login
+    try:
+        db.log_action(
+            user_id=row[0],
+            action="login",
+            target_table="users",
+            target_id=row[0],
+            details=f"{row[3]} logged in successfully.",
+        )
+    except Exception as e:
+        print(f"⚠️ Logging error: {e}")
     
     return jsonify(access_token=access_token)
 
@@ -258,6 +297,17 @@ def navbar():
     # print('current_user: ', current_user)
     return jsonify(logged_in_as=current_user)
 
+@app.route("/api/dashboard", methods=["GET"])
+@jwt_required()
+def circuits_grouped_by_vendor_and_type():
+    # print("🚀 API HIT: /api/dashboard")
+    try:
+        result = db.get_all_circuits_grouped_by_vendor_and_type()
+        # pprint(result)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/mimir/api/circuits', methods=['GET', 'POST'])
 @jwt_required()
 def circuits():
@@ -328,12 +378,14 @@ def addcircuit():
     data = request.get_json()
     # pprint(data)
 
-    # Sanitize and format MRC
+    # Sanitize and format decimal values
     try:
         mrc = float(data.get('mrc', 0))
         data['mrc'] = f"{mrc:.2f}"
+        sellingPrice = float(data.get('sellingPrice', 0))
+        data['sellingPrice'] = f"{sellingPrice:.2f}"
     except (ValueError, TypeError):
-        return make_response({"error": "Invalid MRC value"}, 400)
+        return make_response({"error": "Invalid decimal values"}, 400)
 
     # Set status
     status = 'Active'
@@ -362,7 +414,7 @@ def addcircuit():
     try:
         db.save_circuit(
             data.get('vendor'),
-            data.get('circuittype'),
+            data.get('circuitType'),
             data.get('speed'),
             data.get('circuitNumber'),
             data.get('circuitOwner'),
@@ -372,11 +424,31 @@ def addcircuit():
             data.get('contractTerm'),
             data.get('endDate'),
             data['mrc'],
+            data['sellingPrice'],
             siteA_id,
             siteB_id,
             data.get('comments'),
             status,
             filename
+        )
+
+        # ✅ Logging after successful insert
+        user_id = get_jwt_identity()
+
+        # You can define your own fields list for logging
+        details = describe_changes_log({}, data, fields=[
+            'vendor', 'circuitType', 'speed', 'circuitNumber', 'circuitOwner',
+            'enni', 'vlan', 'startDate', 'contractTerm', 'endDate',
+            'mrc', 'sellingPrice', 'siteA_id', 'siteB_id', 'status', 'comments', 'doc'
+        ])
+
+        # Log action
+        db.log_action(
+            user_id=user_id,
+            action="add",
+            target_table="circuits",
+            target_id=None,  # If you have a way to get the new circuit ID, insert it here
+            details=details
         )
         return make_response({"msg": "Circuit successfully added"}, 200)
     
@@ -480,12 +552,16 @@ def update_circuit(id):
         data = request.get_json()
         # pprint(data)
 
-        # Sanitize and format MRC
+        # Sanitize and format decimal values
         try:
-            mrc = float(data.get('mrc', 0))
-            data['mrc'] = f"{mrc:.2f}"
-        except (ValueError, TypeError):
-            return make_response({"error": "Invalid MRC value"}, 400)
+            mrc_raw = data.get('mrc', '')
+            selling_raw = data.get('sellingPrice', '')
+
+            data['mrc'] = validate_decimal_field(mrc_raw, 'mrc')
+            data['sellingPrice'] = validate_decimal_field(selling_raw, 'sellingPrice')
+
+        except (ValueError, TypeError) as e:
+            return make_response({"error": f"Decimal validation error: {e}"}, 400)
 
         # Handle uploaded document name
         doc_path = data.get('doc')
@@ -500,12 +576,40 @@ def update_circuit(id):
 
         # Attempt to update circuit fields
         try:
+            # ✅ Fetch old data for comparison
+            old_data = db.search_circuit_to_view(id)
+            if not old_data:
+                return jsonify({'error': 'Circuit not found'}), 404
+            
+            # Update circuit
             success = db.update_circuit(id, **data)
+
             if success > 0:
+                # ✅ Get user performing the update
+                user_id = get_jwt_identity()
+
+                # ✅ Create log description
+                details = describe_changes_log(
+                    old_data, data, fields=[
+                        'vendor', 'circuitType', 'speed', 'circuitNumber', 'circuitOwner',
+                        'enni', 'vlan', 'startDate', 'contractTerm', 'endDate',
+                        'mrc', 'sellingPrice', 'siteA_id', 'siteB_id', 'status', 'comments', 'doc'
+                    ]
+                )
+
+                # ✅ Log the change
+                db.log_action(
+                    user_id=user_id,
+                    action="update",
+                    target_table="circuits",
+                    target_id=id,
+                    details=details
+                )
                 # return '', 204  # No Content response
                 return jsonify({'message': 'Circuit updated successfully'}), 200
             else:
                 return jsonify({'error': 'No changes made'}), 200
+            
         except Exception as e:
             print(f"Database error: {e}")
             return make_response({"error": "Unable to update circuit"}, 500)
@@ -534,6 +638,18 @@ def get_site():
     search_term = data.get("site", "")
     results = db.search_sitename(search_term)
     return jsonify(results)
+
+@app.route('/api/logs', methods=['GET'])
+# @jwt_required()
+def view_logs():
+    try:
+        # print("VIEW_LOGS ROUTE HIT ✅")
+        rows = db.view_logs()
+        # print("ROWS:", rows)
+        return jsonify(rows)
+    except Exception as e:
+        print("ERROR:", str(e))
+        return jsonify({"error": str(e)}), 500
 
 # This route will serve the React app - this helps for routing in the Production environment
 @app.route("/mimir", defaults={"path": ""})

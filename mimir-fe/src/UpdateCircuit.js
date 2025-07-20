@@ -4,6 +4,22 @@ import { useNavigate, useParams } from "react-router-dom";
 import { addMonths, subDays, parseISO, format } from 'date-fns';
 
 const UpdateCircuit = () => {
+
+    // The below is read from circuit-options.json file and loaded on the page with useEffect 
+    const [speeds, setSpeeds] = useState([]);
+    const [contractTerms, setContractTerms] = useState([]);
+    const [ennis, setEnnis] = useState([]);
+
+    useEffect(() => {
+        fetch("/circuit-options.json")
+            .then((res) => res.json())
+            .then((data) => {
+            setSpeeds(data.speeds);
+            setContractTerms(data.contractTerms);
+            setEnnis(data.ennis);
+            })
+            .catch((err) => console.error("Failed to load options:", err));
+    }, []);
     
     const {id}  = useParams()
     let navigate = useNavigate();
@@ -19,8 +35,33 @@ const UpdateCircuit = () => {
     const [contractTerm, setContractTerm] = useState('');
     const [endDate, setEndDate] = useState('');
     const [mrc, setMrc] = useState('');
+    const [sellingPrice, setSellingPrice] = useState('');
     const [comments, setComments] = useState('');
     const [status, setStatus] = useState('');
+
+    const [valueA, setValueA] = useState('');
+    const [valueB, setValueB] = useState('');
+    const [operation, setOperation] = useState('+');
+
+    const calculate = (a, b, op) => {
+    const numA = parseFloat(a);
+    const numB = parseFloat(b);
+
+    if (isNaN(numA) || isNaN(numB)) return '—';
+
+    switch (op) {
+        case '+':
+        return (numA + numB).toFixed(2);
+        case '-':
+        return (numA - numB).toFixed(2);
+        case '*':
+        return (numA * numB).toFixed(2);
+        case '/':
+        return numB !== 0 ? (numA / numB).toFixed(2) : '∞';
+        default:
+        return '—';
+    }
+    };
 
     useEffect(() => {
         window.scrollTo(0, 0);
@@ -37,6 +78,7 @@ const UpdateCircuit = () => {
                 setContractTerm(circuit.contractTerm || '');
                 setEndDate(circuit.endDate ? new Date(circuit.endDate).toISOString().split('T')[0] : '');
                 setMrc(circuit.mrc || '');
+                setSellingPrice(circuit.sellingPrice || '');
                 setComments(circuit.comments || '');
                 setStatus(circuit.status || '');
                 setDoc(circuit.doc || '');
@@ -73,6 +115,7 @@ const UpdateCircuit = () => {
                 }
     
             // Submit the rest of the form data
+
             const circuitData = {
                 speed,
                 startDate,
@@ -81,30 +124,34 @@ const UpdateCircuit = () => {
                 enni,
                 vlan,
                 mrc,
+                sellingPrice,
                 comments,
                 status,
                 doc: selectedFile?.name || doc || null, // optionally store filename
             };
             
-            // 3. Save circuit data
+            // 🔎 1. Validate and send circuit data first
             try {
-            const res = await axios.put(`/mimir/api/circuits/updatecircuit/${id}`, circuitData, {
-                headers: { 'Content-Type': 'application/json' },
-                withCredentials: true
-            });
 
-            if (res.status === 200) {
-                setShowSuccess(true);
-                setTimeout(() => navigate('/circuits'), 1500);
-            } else if (res.status === 204) {
-                // No changes made, maybe just show info or silently proceed
-                console.log('No changes made to the circuit.');
+                const res = await axios.put(`/mimir/api/circuits/updatecircuit/${id}`, circuitData, {
+                    headers: { 'Content-Type': 'application/json' },
+                    withCredentials: true
+                });
+
+
+                    // ✅ 3. Navigate away after brief delay
+                    setTimeout(() => navigate('/circuits'), 1500);
+                } else if (res.status === 204) {
+                    console.log('No changes made to the circuit.');
+                }
+            } catch (err) {
+                console.error('Failed to update circuit:', err);
+
+                // Show backend error message in alert
+                const errorMsg = err.response?.data?.error || 'Failed to update circuit.';
+                alert(errorMsg);
             }
-        } catch (err) {
-            console.error('Failed to update circuit:', err);
-            alert('Failed to update circuit.');
-        }
-    };
+        };
     
     // Working with dates to set the last day of the contract equal to first day plus the contract term
     const lastDay = (term) => {
@@ -132,61 +179,16 @@ const UpdateCircuit = () => {
             }
         };
 
-    // The below are predefined sets of dropdown menus for the rest of the input fields
-    const speeds = [
-        {label: "10Mbps", value: "10Mbps"},
-        {label: "20Mbps", value: "20Mbps"},
-        {label: "25Mbps", value: "25Mbps"},
-        {label: "30Mbps", value: "30Mbps"},
-        {label: "40Mbps", value: "40Mbps"},
-        {label: "50Mbps", value: "50Mbps"},
-        {label: "100Mbps", value: "100Mbps"},
-        {label: "200Mbps", value: "200Mbps"},
-        {label: "250Mbps", value: "250Mbps"},
-        {label: "300Mbps", value: "300Mbps"},
-        {label: "400Mbps", value: "400Mbps"},
-        {label: "500Mbps", value: "500Mbps"},
-        {label: "600Mbps", value: "600Mbps"},
-        {label: "700Mbps", value: "700Mbps"},
-        {label: "800Mbps", value: "800Mbps"},
-        {label: "1Gbps", value: "1Gbps"},
-        {label: "1.5Gbps", value: "1.5Gbps"},
-        {label: "2Gbps", value: "2Gbps"},
-        {label: "2.5Gbps", value: "2.5Gbps"},
-        {label: "3Gbps", value: "3Gbps"},
-        {label: "3.5Gbps", value: "3.5Gbps"},
-        {label: "5Gbps", value: "5Gbps"},
-        {label: "6Gbps", value: "6Gbps"},
-        {label: "7Gbps", value: "7Gbps"},
-        {label: "8Gbps", value: "8Gbps"},
-        {label: "10Gbps", value: "10Gbps"},
-    ]
-
-    const contractTerms = [
-        {label: "12 Months", value: 12},
-        {label: "24 Months", value: 24},
-        {label: "36 Months", value: 36},
-        {label: "60 Months", value: 60},
-    ]
-
-    const ennis = [
-        {label: "ENI21-0000123", value: "ENI21-0000123"},
-        {label: "ENI11-0001059", value: "ENI11-0001059"},
-        {label: "ENI11-0001107", value: "ENI11-0001107"},
-        {label: "ENI11-0001122", value: "ENI11-0001122"},
-        {label: "ENI21-0006085", value: "ENI21-0006085"},
-        {label: "ENI11-0006137", value: "ENI11-0006137"},
-        {label: "GNI21-0000071", value: "GNI21-0000071"},
-    ]
-
     return ( 
         
         <div className="p-6 bg-base-200 min-h-screen">
             <div className="max-w-5xl mx-auto">
                 <div className="card bg-white dark:bg-gray-800 shadow-xl p-8">
+                    <h2 className="text-2xl font-semibold mb-6 text-center">Update Circuit</h2>
 
                     <form onSubmit={(e) => {handleSubmit(e)}}>
-                        <h1><strong>{data.vendor} | {data.circuitType} | {data.circuitNumber}</strong></h1>
+                        <h1><strong>Client: {data.siteB_name}</strong></h1>
+                        <h6><strong>{data.vendor} | {data.circuitType} | {data.circuitNumber}</strong></h6>
 
                         {/* Row 1 */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -250,68 +252,175 @@ const UpdateCircuit = () => {
                         </div>
 
                         {/* Row 2 */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {/* Start Date */}
-                                <div className="form-control">
-                                    <label className="label">
-                                    <span className="label-text">Start Date</span>    
-                                    </label>
-                                    <input
-                                    className="input input-bordered w-full"
-                                    type="date"
-                                    required
-                                    value={startDate}
-                                    onChange={(e) => setStartDate(e.target.value)}
-                                    />
-                                </div>
+                            <div className="form-control">
+                                <label className="label">
+                                <span className="label-text">Start Date</span>    
+                                </label>
+                                <input
+                                className="input input-bordered w-full"
+                                type="date"
+                                required
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                />
+                            </div>
 
-                                {/* Contract Term Dropdown */}
-                                <div className="form-control">
-                                    <label htmlFor="contractterm" className="label">
-                                    <span className="label-text">Contract Term</span>
-                                    </label>
-                                    <select
-                                    value={contractTerm}
-                                    onChange={(e) => lastDay(e.target.value)}
-                                    id="contractterm"
-                                    className="input input-bordered w-full"
-                                    required
-                                    >
-                                    <option value="" disabled>Choose an option...</option>
-                                    {contractTerms.map((term, index) => (
-                                        <option key={index} value={term.value}>{term.label}</option>
-                                    ))}
-                                    </select>
-                                </div>
+                            {/* Contract Term Dropdown */}
+                            <div className="form-control">
+                                <label htmlFor="contractterm" className="label">
+                                <span className="label-text">Contract Term</span>
+                                </label>
+                                <select
+                                value={contractTerm}
+                                onChange={(e) => lastDay(e.target.value)}
+                                id="contractterm"
+                                className="input input-bordered w-full"
+                                required
+                                >
+                                <option value="" disabled>Choose an option...</option>
+                                {contractTerms.map((term, index) => (
+                                    <option key={index} value={term.value}>{term.label}</option>
+                                ))}
+                                </select>
+                            </div>
 
-                                {/* Last Day of Contract (Calculated) */}
-                                <div className="form-control">
-                                    <label className="label">
-                                    <span className="label-text">Last Day of Contract</span>    
-                                    </label>
-                                    <input
-                                    className="input input-bordered w-full"
-                                    type="date"
-                                    required
-                                    readOnly
-                                    value={endDate}
-                                    />
-                                </div>
-                                
-                                <div className="form-control">
-                                    <label className="label">
-                                        <span className="label-text">Monthly Recurring Cost (ex VAT)</span>    
-                                    </label>
-                                    <input className="input input-bordered w-full"
-                                        type="text" 
-                                        required
-                                        value = { mrc }
-                                        onChange={(e) => setMrc(e.target.value)} 
-                                    />
-                                </div>
+                            {/* Last Day of Contract (Calculated) */}
+                            <div className="form-control">
+                                <label className="label">
+                                <span className="label-text">Last Day of Contract</span>    
+                                </label>
+                                <input
+                                className="input input-bordered w-full"
+                                type="date"
+                                required
+                                readOnly
+                                value={endDate}
+                                />
+                            </div>
                         </div>
 
-                        {/* Row 3 */}
+                        {/* Row 3-5 Layout with Profit Tool, Notes, and Calculator */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
+
+                            {/* Row 3 Col 1 - MRC */}
+                            <div className="form-control col-span-1">
+                                <label className="label">
+                                    <span className="label-text">Monthly Recurring Cost (ex VAT)</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    className="input input-bordered w-full"
+                                    placeholder="R"
+                                    required
+                                    value={mrc}
+                                    onChange={(e) => setMrc(e.target.value)}
+                                />
+                            </div>
+
+                            {/* Row 4 Col 1 - Selling Price */}
+                            <div className="form-control col-span-1">
+                                <label className="label">
+                                    <span className="label-text">Selling Price (ex VAT)</span>    
+                                </label>
+                                <input
+                                    type="text"
+                                    className="input input-bordered w-full"
+                                    placeholder="R"
+                                    required
+                                    value={sellingPrice}
+                                    onChange={(e) => setSellingPrice(e.target.value)}
+                                />
+                            </div>
+
+
+                            {/* Row 3-5 Col 3 - Profit Tool and Notes */}
+                            <div className="col-span-1 row-span-3 p-4 rounded-lg border border-yellow-500 bg-white dark:bg-gray-800 shadow-md shadow-yellow-500">
+                                <h3 className="text-md font-semibold mb-2 text-gray-700 dark:text-gray-100">💰 Profit Tool</h3>
+                                <p className="text-sm text-gray-800 dark:text-gray-200">
+                                    Profit: <strong>R{(Number(sellingPrice || 0) - Number(mrc || 0)).toFixed(2)}</strong>
+                                </p>
+                                <p className="text-sm text-gray-800 dark:text-gray-200">
+                                    Margin: <strong>{(((Number(sellingPrice || 0) - Number(mrc || 0)) / Number(mrc || 1)) * 100).toFixed(2)}%</strong>
+                                </p>
+
+                                <h3 className="text-md font-semibold mb-2 mt-5 text-gray-700 dark:text-gray-100">📝 Notes</h3>
+                                        <textarea className="textarea textarea-bordered w-full min-h-[200px]" placeholder="e.g., Make dat money yo" />
+                            </div>
+                            
+                            {/* Calculator (Col 4, Row-span 3) */}
+                            <div className="col-span-1 row-span-3 p-4 rounded-lg border border-yellow-500 bg-white dark:bg-gray-800 shadow-md shadow-yellow-500">
+                                <h3 className="text-md font-semibold mb-4 text-gray-700 dark:text-gray-100">🧮 Calculator</h3>
+
+                                <div className="space-y-4">
+                                    {/* First Number */}
+                                    <div>
+                                        <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Value A</label>
+                                        <input
+                                            type="number"
+                                            value={valueA}
+                                            onChange={(e) => setValueA(e.target.value)}
+                                            className="input input-bordered w-full"
+                                            placeholder="Enter value"
+                                        />
+                                    </div>
+
+                                    {/* Operation */}
+                                    <div>
+                                        <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Operation</label>
+                                        <select
+                                            value={operation}
+                                            onChange={(e) => setOperation(e.target.value)}
+                                            className="select select-bordered w-full"
+                                        >
+                                            <option value="+">➕ Add</option>
+                                            <option value="-">➖ Subtract</option>
+                                            <option value="*">✖ Multiply</option>
+                                            <option value="/">➗ Divide</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Second Number */}
+                                    <div>
+                                        <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Value B</label>
+                                        <input
+                                            type="number"
+                                            value={valueB}
+                                            onChange={(e) => setValueB(e.target.value)}
+                                            className="input input-bordered w-full"
+                                            placeholder="Enter value"
+                                        />
+                                    </div>
+
+                                    {/* Result */}
+                                    <div className="mt-4 border-t pt-4">
+                                        <p className="text-sm text-gray-600 dark:text-gray-300">Result</p>
+                                        <p className="text-xl font-bold text-gray-800 dark:text-gray-100">
+                                            {calculate(valueA, valueB, operation)}
+                                        </p>
+                                    </div>
+
+                                    {/* Clear Button */}
+                                    <div className="mt-4">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                            setValueA('');
+                                            setValueB('');
+                                            setOperation('+');
+                                            }}
+                                            className="btn btn-sm btn-warning w-full"
+                                        >
+                                            Clear
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+
+                        {/* Row 5 */}
                         <div className="form-control">
                             <label className="label">
                                 <span className="label-text">Additional Comments</span>    

@@ -1,4 +1,6 @@
 import pymysql
+from datetime import datetime
+from flask import request
 
 class DbUtil:
     def __init__(self, config):
@@ -147,14 +149,14 @@ class DbUtil:
     
     # DB OPS WITH CIRCUITS
     # Save a new circuit
-    def save_circuit(self, vendor, circuitType, speed, circuitNumber, circuitOwner, enni, vlan, startDate, contractTerm, endDate, mrc, siteA, siteB, comments, status, doc):
+    def save_circuit(self, vendor, circuitType, speed, circuitNumber, circuitOwner, enni, vlan, startDate, contractTerm, endDate, mrc, sellingPrice, siteA, siteB, comments, status, doc):
         con = self.get_connection()
 
         try:
             with con.cursor() as c:
                 c.execute(
-                   'INSERT INTO circuits (vendor, circuitType, speed, circuitNumber, circuitOwner, enni, vlan, startDate, contractTerm, endDate, mrc, siteA, siteB, comments, status, doc) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)', 
-                    (vendor, circuitType, speed, circuitNumber, circuitOwner, enni, vlan, startDate, contractTerm, endDate, mrc, siteA, siteB, comments, status, doc)
+                   'INSERT INTO circuits (vendor, circuitType, speed, circuitNumber, circuitOwner, enni, vlan, startDate, contractTerm, endDate, mrc, sellingPrice, siteA, siteB, comments, status, doc) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)', 
+                    (vendor, circuitType, speed, circuitNumber, circuitOwner, enni, vlan, startDate, contractTerm, endDate, mrc, sellingPrice, siteA, siteB, comments, status, doc)
                 )
                 con.commit()
                 return c.lastrowid
@@ -235,6 +237,30 @@ class DbUtil:
                 return c.rowcount
         finally:
             con.close()
+
+    def get_all_circuits_grouped_by_vendor_and_type(self):
+        con = self.get_connection()
+
+        query = """
+            SELECT 
+                vendor,
+                circuitType,
+                COUNT(*) AS count
+            FROM circuits
+            WHERE vendor IS NOT NULL AND circuitType IS NOT NULL AND status != 'Cancelled'
+            GROUP BY vendor, circuitType
+            ORDER BY vendor, circuitType
+        """
+
+        try:
+            with con.cursor() as c:
+                c.execute(query)
+                rows = c.fetchall()
+                col_names = [c[0] for c in c.description]
+                return [dict(zip(col_names, row)) for row in rows]
+        finally:
+            con.close()
+
    
     def fetch_expiring_circuits(self):
         con = self.get_connection()
@@ -281,5 +307,42 @@ class DbUtil:
                 rows = c.fetchall()
                 col_names = [desc[0] for desc in c.description]
                 return [dict(zip(col_names, row)) for row in rows]
+        finally:
+            con.close()
+
+    def log_action(self, user_id, action, target_table=None, target_id=None, details=None):
+        con = self.get_connection()
+        
+        ip_address = request.remote_addr
+        user_agent = request.headers.get('User-Agent')
+        timestamp = datetime.now()
+
+        try:
+            with con.cursor() as c:
+                query = """
+                    INSERT INTO user_logs (user_id, action, target_table, target_id, ip_address, user_agent, timestamp, details)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                c.execute(query, (user_id, action, target_table, target_id, ip_address, user_agent, timestamp, details))
+                con.commit()
+                return c.lastrowid
+        finally:
+            con.close()
+
+    def view_logs(self):
+        con = self.get_connection()
+
+        try:
+            with con.cursor() as c:
+                query = """
+                    SELECT id, user_id, action, target_table, target_id, ip_address, timestamp, details
+                    FROM user_logs
+                    ORDER BY timestamp DESC
+                    LIMIT 100
+                """
+                c.execute(query)
+                logs = c.fetchall()
+                col_names = [c[0] for c in c.description]
+                return [dict(zip(col_names, log)) for log in logs]
         finally:
             con.close()

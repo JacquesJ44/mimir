@@ -1,0 +1,72 @@
+{
+  "vendors": [
+    {
+      "vendor": "Comsol",
+      "type": ["CX Broadband (PtMP)", "CX Plus Broadband (PTP)", "CX Broadband Lite"]
+    },
+    {
+      "vendor": "DFA",
+      "type": ["Business Broadband", "Calypte", "ENNI/GNNI", "Helios", "Magellan", "Peregrine", "Tachyon", "Titan"]
+    },
+    {
+      "vendor": "Ikeja",
+      "type": ["DFA Business Broadband", "DFA Calypte", "DFA ENNI/GNNI", "DFA Helios", "DFA Magellan", "DFA Peregrine", "DFA Tachyon", "DFA Titan"]
+    },
+    {
+      "vendor": "Seacom",
+      "type": ["EIA via DFA Helios", "EIA via MTB", "EIA via Openserve", "EIA via Other", "BIA via MTB", "BIA via Octotel", "BIA via Openserve", "BIA via VO Connect", "BIA via Other"]
+    },
+    {
+      "vendor": "Wondernet",
+      "type": ["50/50Mbps via Octotel", "100/100Mbps via Octotel", "50/50Mbps via Openserve", "100/100Mbps via Openserve", "50/50Mbps via Other", "100/100Mbps via Other"]
+    }
+  ],
+
+  "speeds": [
+    { "label": "10Mbps", "value": "10Mbps" },
+    { "label": "20Mbps", "value": "20Mbps" },
+    { "label": "25Mbps", "value": "25Mbps" },
+    { "label": "30Mbps", "value": "30Mbps" },
+    { "label": "40Mbps", "value": "40Mbps" },
+    { "label": "50Mbps", "value": "50Mbps" },
+    { "label": "100Mbps", "value": "100Mbps" },
+    { "label": "200Mbps", "value": "200Mbps" },
+    { "label": "250Mbps", "value": "250Mbps" },
+    { "label": "300Mbps", "value": "300Mbps" },
+    { "label": "400Mbps", "value": "400Mbps" },
+    { "label": "500Mbps", "value": "500Mbps" },
+    { "label": "600Mbps", "value": "600Mbps" },
+    { "label": "700Mbps", "value": "700Mbps" },
+    { "label": "800Mbps", "value": "800Mbps" },
+    { "label": "1Gbps", "value": "1Gbps" },
+    { "label": "1.5Gbps", "value": "1.5Gbps" },
+    { "label": "2Gbps", "value": "2Gbps" },
+    { "label": "2.5Gbps", "value": "2.5Gbps" },
+    { "label": "3Gbps", "value": "3Gbps" },
+    { "label": "3.5Gbps", "value": "3.5Gbps" },
+    { "label": "4Gbps", "value": "4Gbps" },
+    { "label": "5Gbps", "value": "5Gbps" },
+    { "label": "6Gbps", "value": "6Gbps" },
+    { "label": "7Gbps", "value": "7Gbps" },
+    { "label": "8Gbps", "value": "8Gbps" },
+    { "label": "9Gbps", "value": "9Gbps" },
+    { "label": "10Gbps", "value": "10Gbps" }
+  ],
+
+  "contractTerms": [
+    { "label": "12 Months", "value": 12 },
+    { "label": "24 Months", "value": 24 },
+    { "label": "36 Months", "value": 36 },
+    { "label": "60 Months", "value": 60 }
+  ],
+
+    "ennis": [
+        { "label": "ENI11-0001059", "value": "ENI11-0001059" },
+        { "label": "ENI11-0001107", "value": "ENI11-0001107" },
+        { "label": "ENI21-0000123", "value": "ENI21-0000123" },
+        { "label": "GNI21-0000071", "value": "GNI21-0000071" },
+        { "label": "ENI11-0001122", "value": "ENI11-0001122" },
+        { "label": "ENI11-0006137", "value": "ENI11-0006137" },
+        { "label": "ENI21-0006085", "value": "ENI21-0006085" }
+    ]
+}

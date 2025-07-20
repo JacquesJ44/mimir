@@ -68,7 +68,41 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
           <p>
             Page {pageNumber || (numPages ? 1 : '--')} of {numPages || '--'}
           </p>
-          <button
+
+          <div className="flex justify-between items-center w-full mt-4">
+            <div>
+              <button
+                className="mx-2 inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-black bg-gray-200 hover:bg-yellow-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400"
+                type="button"
+                disabled={pageNumber <= 1}
+                onClick={previousPage}
+              >
+                Previous
+              </button>
+
+              <button
+                className="mx-2 inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-black bg-gray-200 hover:bg-yellow-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400"
+                type="button"
+                disabled={pageNumber >= numPages}
+                onClick={nextPage}
+              >
+                Next
+              </button>
+            </div>
+
+            {file && (
+              <div>
+                <a
+                  href={file}
+                  download={`circuit_doc_${id}.pdf`}
+                  className="mx-2 inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-accent hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent"
+                >
+                  Download Document
+                </a>
+              </div>
+            )}
+          </div>
+          {/* <button
             className="mx-2 inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-black bg-gray-200 hover:bg-yellow-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400"
             type="button"
             disabled={pageNumber <= 1}
@@ -86,7 +120,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
             Next
           </button>
           {file && (
-            <div className="mt-4">
+            <div className="mx-2 inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-black bg-gray-200 hover:bg-yellow-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400">
               <a
                   href={file}
                   download={`circuit_doc_${id}.pdf`}
@@ -94,7 +128,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
                   Download Document
               </a>
             </div>
-          )}
+          )} */}
         </div>
       </div>
       </>
