@@ -62,7 +62,7 @@ const Dashboard = () => {
 
   return (
     <div className="w-screen px-4 py-6">
-    <div className="bg-white rounded-2xl shadow p-6 w-full max-w-[1400px] mx-auto">
+    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-6 w-full max-w-[1400px] mx-auto">
       <h2 className="text-2xl font-bold mb-6">Circuits per Vendor and Type</h2>
 
       <div className="w-full h-[400px]">
