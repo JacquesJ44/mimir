@@ -35,7 +35,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
         useEffect(() => {
           const fetchFile = async () => {
             try {
-              const response = await axios.get(`/api/download/${id}`, {
+              const response = await axios.get(`/mimir/api/download/${id}`, {
                 responseType: 'blob', // 👈 important for binary files like PDFs
                 withCredentials: true
               });

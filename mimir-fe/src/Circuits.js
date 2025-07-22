@@ -23,7 +23,7 @@ const Circuits = () => {
     const [circuitTypes, setCircuitTypes] = useState([]);
 
     useEffect(() => {
-        fetch("/circuit-options.json")
+        fetch("/mimir/circuit-options.json")
             .then((res) => res.json())
             .then((data) => {
             setVendorOptions(data.vendors);
@@ -76,7 +76,7 @@ const Circuits = () => {
             enni: enni,
             status: status,
         };
-       axios.post('/api/circuits', form, { withCredentials: true })
+       axios.post('/mimir/api/circuits', form, { withCredentials: true })
         .then(res => {
             setData(res.data);
             // console.log(res.data);

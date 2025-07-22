@@ -154,7 +154,7 @@ const exportToPDF = () => {
 
   useEffect(() => {
     axios
-      .get("/api/dashboard")
+      .get("/mimir/api/dashboard")
       .then((res) => {
         const transformed = {};
         const typeSet = new Set();
