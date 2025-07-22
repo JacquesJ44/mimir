@@ -149,14 +149,14 @@ class DbUtil:
     
     # DB OPS WITH CIRCUITS
     # Save a new circuit
-    def save_circuit(self, vendor, circuitType, speed, circuitNumber, circuitOwner, enni, vlan, startDate, contractTerm, endDate, mrc, sellingPrice, siteA, siteB, comments, status, doc):
+    def save_circuit(self, vendor, circuitType, speed, circuitNumber, circuitOwner, usageFlag, enni, vlan, startDate, contractTerm, endDate, mrc, sellingPrice, siteA, siteB, comments, status, doc):
         con = self.get_connection()
 
         try:
             with con.cursor() as c:
                 c.execute(
-                   'INSERT INTO circuits (vendor, circuitType, speed, circuitNumber, circuitOwner, enni, vlan, startDate, contractTerm, endDate, mrc, sellingPrice, siteA, siteB, comments, status, doc) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)', 
-                    (vendor, circuitType, speed, circuitNumber, circuitOwner, enni, vlan, startDate, contractTerm, endDate, mrc, sellingPrice, siteA, siteB, comments, status, doc)
+                   'INSERT INTO circuits (vendor, circuitType, speed, circuitNumber, circuitOwner, usageFlag,enni, vlan, startDate, contractTerm, endDate, mrc, sellingPrice, siteA, siteB, comments, status, doc) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)', 
+                    (vendor, circuitType, speed, circuitNumber, circuitOwner, usageFlag, enni, vlan, startDate, contractTerm, endDate, mrc, sellingPrice, siteA, siteB, comments, status, doc)
                 )
                 con.commit()
                 return c.lastrowid
