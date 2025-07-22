@@ -22,7 +22,7 @@ instance.interceptors.response.use(response => {
   // Optional: handle expired/invalid token
   if (error.response?.status === 401) {
     localStorage.removeItem('token');
-    window.location.href = '/login'; // Or use navigate() in context
+    window.location.href = '/mimir/login'; // Or use navigate() in context
   }
   return Promise.reject(error);
 });

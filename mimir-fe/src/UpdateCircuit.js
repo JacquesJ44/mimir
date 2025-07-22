@@ -11,7 +11,7 @@ const UpdateCircuit = () => {
     const [ennis, setEnnis] = useState([]);
 
     useEffect(() => {
-        fetch("/circuit-options.json")
+        fetch("/mimir/circuit-options.json")
             .then((res) => res.json())
             .then((data) => {
             setSpeeds(data.speeds);
@@ -98,25 +98,7 @@ const UpdateCircuit = () => {
             const fileInput = document.getElementById('formFile');
             const selectedFile = fileInput?.files?.[0];
             
-            // If file is selected, upload it
-            if (selectedFile) {
-                const formData = new FormData();
-                formData.append('doc', selectedFile);
-
-                try {
-                    await axios.post('/mimir/api/upload', formData, {
-                        headers: { 'Content-Type': 'multipart/form-data' },
-                        withCredentials: true
-                    });
-                    } catch (uploadErr) {
-                        console.error('Upload failed:', uploadErr);
-                        alert('File upload failed');
-                        return;
-                    }
-                }
-    
-            // Submit the rest of the form data
-
+            // Contruct circuit data
             const circuitData = {
                 speed,
                 startDate,
@@ -133,12 +115,29 @@ const UpdateCircuit = () => {
             
             // 🔎 1. Validate and send circuit data first
             try {
-
                 const res = await axios.put(`/mimir/api/circuits/updatecircuit/${id}`, circuitData, {
                     headers: { 'Content-Type': 'application/json' },
                     withCredentials: true
                 });
 
+                if (res.status === 200) {
+                    setShowSuccess(true);
+
+                    // ✅ 2. If circuit update was successful and file selected, upload it
+                    if (selectedFile) {
+                        const formData = new FormData();
+                        formData.append('doc', selectedFile);
+
+                        try {
+                            await axios.post('/mimir/api/upload', formData, {
+                                headers: { 'Content-Type': 'multipart/form-data' },
+                                withCredentials: true
+                            });
+                        } catch (uploadErr) {
+                            console.error('Upload failed:', uploadErr);
+                            alert('File upload failed (circuit was updated).');
+                        }
+                    }
 
                     // ✅ 3. Navigate away after brief delay
                     setTimeout(() => navigate('/circuits'), 1500);

@@ -260,7 +260,7 @@ const exportToPDF = () => {
 
   useEffect(() => {
     axios
-      .get("/api/dashboard")
+      .get("/mimir/api/dashboard")
       .then((res) => {
         const transformed = {};
         const typeSet = new Set();
@@ -303,7 +303,7 @@ const exportToPDF = () => {
       setSelectedVendor(vendor);
       setLoadingCircuits(true);
       
-      axios.get(`/api/dashboard/vendor/${vendor}`)
+      axios.get(`/mimir/api/dashboard/vendor/${vendor}`)
       .then((res) => {
         setVendorCircuits(res.data);
       })
@@ -382,6 +382,7 @@ const exportToPDF = () => {
                   const markup = isClient
                     ? ((gp / c.mrc) * 100).toFixed(1)
                     : null;
+
 
                   return (
                     <tr key={idx} className="hover">

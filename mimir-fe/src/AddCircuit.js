@@ -14,7 +14,7 @@ const AddCircuit = () => {
     const [circuitTypes, setCircuitTypes] = useState([]);
 
     useEffect(() => {
-        fetch("/circuit-options.json")
+        fetch("/mimir/circuit-options.json")
             .then((res) => res.json())
             .then((data) => {
             setVendors(data.vendors);
@@ -183,7 +183,7 @@ const AddCircuit = () => {
                 formData.append('doc', selectedFile);
 
                 try {
-                    await axios.post('/api/upload', formData, {
+                    await axios.post('/mimir/api/upload', formData, {
                         headers: { 'Content-Type': 'multipart/form-data' },
                             withCredentials: true
                     });
