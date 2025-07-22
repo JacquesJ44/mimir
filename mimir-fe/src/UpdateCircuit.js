@@ -35,10 +35,10 @@ const UpdateCircuit = () => {
     const [contractTerm, setContractTerm] = useState('');
     const [endDate, setEndDate] = useState('');
     const [mrc, setMrc] = useState('');
+    const [usageFlag, setUsageFlag] = useState('');
     const [sellingPrice, setSellingPrice] = useState('');
     const [comments, setComments] = useState('');
     const [status, setStatus] = useState('');
-
     const [valueA, setValueA] = useState('');
     const [valueB, setValueB] = useState('');
     const [operation, setOperation] = useState('+');
@@ -69,7 +69,7 @@ const UpdateCircuit = () => {
             .then(res => {
                 const circuit = res.data;
                 // console.log('Fetched circuit status:', circuit.status);
-                // console.log(circuit);
+                console.log(circuit);
                 setData(circuit);
                 setSpeed(circuit.speed || '');
                 setEnni(circuit.enni || '');
@@ -78,6 +78,7 @@ const UpdateCircuit = () => {
                 setContractTerm(circuit.contractTerm || '');
                 setEndDate(circuit.endDate ? new Date(circuit.endDate).toISOString().split('T')[0] : '');
                 setMrc(circuit.mrc || '');
+                setUsageFlag(circuit.usageFlag || '');
                 setSellingPrice(circuit.sellingPrice || '');
                 setComments(circuit.comments || '');
                 setStatus(circuit.status || '');
@@ -106,7 +107,7 @@ const UpdateCircuit = () => {
                 enni,
                 vlan,
                 mrc,
-                sellingPrice,
+                sellingPrice: usageFlag === 'Client' ? sellingPrice : null,
                 comments,
                 status,
                 doc: selectedFile?.name || doc || null, // optionally store filename
@@ -318,7 +319,8 @@ const UpdateCircuit = () => {
                                 />
                             </div>
 
-                            {/* Row 4 Col 1 - Selling Price */}
+                            {/* Row 4 Col 1 - Selling Price, Display only if usageFlag is 'Client' */}
+                            {usageFlag === 'Client' && (
                             <div className="form-control col-span-1">
                                 <label className="label">
                                     <span className="label-text">Selling Price (ex VAT)</span>    
@@ -332,7 +334,7 @@ const UpdateCircuit = () => {
                                     onChange={(e) => setSellingPrice(e.target.value)}
                                 />
                             </div>
-
+                            )}
 
                             {/* Row 3-5 Col 3 - Profit Tool and Notes */}
                             <div className="col-span-1 row-span-3 p-4 rounded-lg border border-yellow-500 bg-white dark:bg-gray-800 shadow-md shadow-yellow-500">

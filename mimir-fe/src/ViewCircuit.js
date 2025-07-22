@@ -42,7 +42,8 @@ const ViewCircuit = () => {
                   <strong>{data.vendor} | {data.circuitType}</strong>
                   <div className="mt-5 md:mt-0 md:col-span-2 text-left"> 
                     <strong>Circuit Number:  </strong> { data.circuitNumber }<br/>
-                    <strong>Circuit Owner:  </strong> { data.circuitOwner }<br/> 
+                    <strong>Circuit Owner:  </strong> { data.circuitOwner }<br/>
+                    <strong>Client/Internal: </strong> { data.usageFlag }<br/> 
                     <strong>Speed:  </strong>{ data.speed }<br/>
                     <strong>ENNI:  </strong>{ data.enni }<br/>
                     <strong>VLAN ID:  </strong>{ data.vlan }<br/>
