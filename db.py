@@ -261,6 +261,26 @@ class DbUtil:
         finally:
             con.close()
 
+    def get_circuits_by_vendor(self, vendor):
+        con = self.get_connection()
+
+        try:
+            with con.cursor() as c:
+                c.execute("""
+                    SELECT 
+                        circuits.*, 
+                        sa.site AS siteA_name, 
+                        sb.site AS siteB_name 
+                    FROM circuits
+                    JOIN sites sa ON circuits.siteA = sa.id
+                    JOIN sites sb ON circuits.siteB = sb.id
+                    WHERE circuits.vendor = %s AND circuits.status != 'Cancelled'
+                """, (vendor,))
+                rows = c.fetchall()
+                col_names = [desc[0] for desc in c.description]
+                return [dict(zip(col_names, row)) for row in rows]
+        finally:
+            con.close()
    
     def fetch_expiring_circuits(self):
         con = self.get_connection()
