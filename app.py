@@ -308,7 +308,7 @@ def circuits_grouped_by_vendor_and_type():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
-@app.route('/api/dashboard/vendor/<vendor_name>', methods=['GET'])
+@app.route('/mimir/api/dashboard/vendor/<vendor_name>', methods=['GET'])
 @jwt_required()
 def get_vendor_circuits(vendor_name):
     circuits = db.get_circuits_by_vendor(vendor_name)  # write this function

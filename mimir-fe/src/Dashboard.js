@@ -197,7 +197,7 @@ const exportToPDF = () => {
       setSelectedVendor(vendor);
       setLoadingCircuits(true);
       
-      axios.get(`/api/dashboard/vendor/${vendor}`)
+      axios.get(`/mimir/api/dashboard/vendor/${vendor}`)
       .then((res) => {
         setVendorCircuits(res.data);
       })
