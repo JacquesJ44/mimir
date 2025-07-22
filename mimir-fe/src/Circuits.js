@@ -300,14 +300,8 @@ const Circuits = () => {
                         <th>ENNI</th>
                         <th>Circuit Owner</th>
                         <th>VLAN</th>
-                        {/* <th>Start Date</th> */}
-                        {/* <th>Contract Term</th> */}
                         <th>End Date</th>
-                        {/* <th>Monthly Recurring Cost (ex VAT)</th> */}
-                        {/* <th>Site A</th> */}
                         <th>Site B</th>
-                        {/* <th>Comments</th> */}
-                        {/* <th>Handover Doc</th> */}
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -343,20 +337,11 @@ const Circuits = () => {
                             <td>{c.enni}</td>
                             <td>{c.circuitOwner}</td>
                             <td>{c.vlan}</td>
-                            {/* <td>{c.startDate ?
-                                new Date(c.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) 
-                                : 'N/A'}
-                            </td>  */}
-                            {/* <td>{c.contractTerm}</td>  */}
                             <td>{c.endDate ?
                                 new Date(c.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) 
                                 : 'N/A'}
                             </td> 
-                            {/* <td>{c.mrc}</td> */}
-                            {/* <td>{c.siteA_name}</td>  */}
                             <td>{c.siteB_name}</td>
-                            {/* <td>{c.comments}</td> */}
-                            {/* <td>{c.doc}</td>  */}
                             <td>
                                 <Link to={'/circuits/viewcircuit/' + c.id} className="btn btn-accent">View</Link>
                             </td>    

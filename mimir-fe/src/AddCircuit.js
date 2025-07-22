@@ -46,7 +46,8 @@ const AddCircuit = () => {
     const [circuitType, setCircuitType] = useState('');
     const [speed, setSpeed] = useState('');
     const [circuitNumber, setCircuitNumber] = useState('');
-    const [circuitOwner, setCircuitOwner] = useState('Aesir');   
+    const [circuitOwner, setCircuitOwner] = useState('Aesir');
+    const [usageFlag, setUsageFlag] = useState('Client')   
     const [enni, setEnni] = useState('');
     const [vlan, setVlan] = useState('');
     const [startDate, setStartDate] = useState('');
@@ -110,13 +111,14 @@ const AddCircuit = () => {
             speed,
             circuitNumber,
             circuitOwner,
+            usageFlag,
             enni: vendor === 'DFA' || vendor === 'Ikeja' ? enni : null,
             vlan: vendor === 'DFA' || vendor === 'Ikeja' ? vlan : null,
             startDate,
             contractTerm,
             endDate,
             mrc,
-            sellingPrice,
+            sellingPrice: usageFlag === 'Client' ? sellingPrice : null,
             siteA_id: siteAId,
             siteB_id: siteBId,
             comments,
@@ -142,11 +144,15 @@ const AddCircuit = () => {
                     formData.append('enni', enni);
                     formData.append('vlan', vlan);
                 }
+                formData.append('usageFlag', usageFlag);
                 formData.append('startDate', startDate);
                 formData.append('contractTerm', contractTerm);
                 formData.append('endDate', endDate);
                 formData.append('mrc', mrc);
-                formData.append('sellingPrice', sellingPrice);
+                if (usageFlag === 'Client') {
+                    formData.append('sellingPrice', sellingPrice);
+                }
+                // formData.append('sellingPrice', sellingPrice);
                 formData.append('siteA_id', siteAId);
                 formData.append('siteB_id', siteBId);
                 formData.append('comments', comments);
@@ -270,8 +276,8 @@ const AddCircuit = () => {
                                 </div>
                             </div>
 
-                            {/* Row - Circuit Owner */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {/* Row 2 - Circuit Owner */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                                 <div className="form-control mb-4">
                                     <label className="label">
                                         <span className="label-text">Circuit Owner</span>
@@ -293,6 +299,34 @@ const AddCircuit = () => {
                                             <img src="/ikejalogo1.png" alt="Ikeja Logo" className="h-5 object-contain" />
                                         </span>
                                         </div>
+                                    </div>
+                                </div>
+                                    
+                                {/* UsageFlag */}
+                                <div className="form-control mb-4">
+                                    <label className="label">
+                                        <span className="label-text">
+                                        <span className={usageFlag === 'Client' ? 'text-blue-600 font-bold' : 'text-gray-400'}>
+                                            Client
+                                        </span>
+                                        {' / '}
+                                        <span className={usageFlag === 'Internal' ? 'text-red-600 font-bold' : 'text-gray-400'}>
+                                            Internal
+                                        </span>
+                                        </span>
+                                    </label>
+                                    <div
+                                        className="relative w-20 h-8 bg-gray-200 dark:bg-gray-700 rounded-full cursor-pointer select-none"
+                                        onClick={() => {
+                                            const newUsageFlag = usageFlag === 'Client' ? 'Internal' : 'Client';
+                                            // console.log('Toggled usageFlag to:', newUsageFlag);
+                                            setUsageFlag(newUsageFlag);
+                                            }}>
+                                        <div
+                                        className={`absolute top-0 left-0 w-10 h-8 bg-white dark:bg-gray-600 rounded-full shadow-md transform transition-transform duration-300 ${
+                                            usageFlag === 'Internal' ? 'translate-x-full' : 'translate-x-0'
+                                        }`}
+                                        />
                                     </div>
                                 </div>
 
@@ -473,7 +507,8 @@ const AddCircuit = () => {
                                     </div>
                                 </div>
 
-                                {/* Selling Price (Row 5, Col 1) */}
+                                {/* Selling Price (Row 5, Col 1) - Display only for usageFlag === 'Client' */}
+                                {usageFlag === 'Client' && (
                                 <div className="form-control col-span-1">
                                 <label className="label">
                                     <span className="label-text">Selling Price (ex VAT)</span>
@@ -487,7 +522,7 @@ const AddCircuit = () => {
                                     onChange={(e) => setSellingPrice(e.target.value)}
                                 />
                                 </div>
-
+                                )}
                                 <div className="form-control col-span-1">
                                     <SiteSelector
                                         label="Site A"

@@ -18,139 +18,245 @@ const Dashboard = () => {
 
   // Export table
   const exportToCSV = () => {
-  const rows = vendorCircuits.map((c) => {
-    const gp = c.sellingPrice - c.mrc;
-    const margin = c.sellingPrice ? ((gp / c.sellingPrice) * 100).toFixed(1) : "0";
-    const formatDate = (dateStr) =>
-      dateStr
-        ? new Date(dateStr).toLocaleDateString('en-GB', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-          })
-        : 'N/A';
+  const headers = [
+    "Circuit #",
+    "Type",
+    "Client",
+    "Usage",
+    "Status",
+    "End Date",
+    "Cost Price",
+    "Selling Price",
+    "Gross Profit",
+    "GP %",
+  ];
 
-    return {
-      "Circuit Number": c.circuitNumber,
-      "Type": c.circuitType,
-      "Client": c.siteB_name,
-      "Status": c.status,
-      "End Date": formatDate(c.endDate),
-      "MRC": `R${c.mrc}`,
-      "Selling Price": `R${c.sellingPrice}`,
-      "Gross Profit": `R${gp}`,
-      "Margin %": `${margin}%`
-    };
+  const rows = vendorCircuits.map((c) => {
+    const isClient = c.usageFlag === "Client" && c.sellingPrice != null;
+    const gp = isClient ? (c.sellingPrice - c.mrc).toFixed(2) : "N/A";
+    const markup = isClient ? ((gp / c.mrc) * 100).toFixed(1) + "%" : "N/A";
+
+    return [
+      c.circuitNumber,
+      c.circuitType,
+      c.siteB_name,
+      c.usageFlag,
+      c.status,
+      c.endDate
+        ? new Date(c.endDate).toLocaleDateString("en-GB")
+        : "N/A",
+      `R${(Number(c.mrc) || 0).toFixed(2)}`,
+      c.sellingPrice != null ? `R${Number(c.sellingPrice).toFixed(2)}` : "N/A",
+      isClient ? `R${gp}` : "N/A",
+      markup,
+    ];
   });
 
-  const worksheet = XLSX.utils.json_to_sheet(rows);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Circuits");
-  const csvOutput = XLSX.write(workbook, { bookType: "csv", type: "array" });
-  saveAs(new Blob([csvOutput], { type: "text/csv;charset=utf-8;" }), "circuits.csv");
+  // Totals
+  const clientCircuits = vendorCircuits.filter(
+    (c) => c.usageFlag === "Client" && c.sellingPrice != null
+  );
+  const internalCircuits = vendorCircuits.filter(
+    (c) => c.usageFlag === "Internal"
+  );
+
+  const totalMRCClient = clientCircuits.reduce(
+    (sum, c) => sum + Number(c.mrc),
+    0
+  );
+  const totalSPClient = clientCircuits.reduce(
+    (sum, c) => sum + Number(c.sellingPrice),
+    0
+  );
+  const totalGPClient = totalSPClient - totalMRCClient;
+  const totalMarkupClient = totalMRCClient
+    ? ((totalGPClient / totalMRCClient) * 100).toFixed(1) + "%"
+    : "0%";
+
+  const totalMRCInternal = internalCircuits.reduce(
+    (sum, c) => sum + Number(c.mrc),
+    0
+  );
+
+  rows.push([
+    "Total (Client)",
+    "",
+    "",
+    "",
+    "",
+    "",
+    `R${totalMRCClient.toFixed(2)}`,
+    `R${totalSPClient.toFixed(2)}`,
+    `R${totalGPClient.toFixed(2)}`,
+    totalMarkupClient,
+  ]);
+
+  rows.push([
+    "Total (Internal)",
+    "",
+    "",
+    "",
+    "",
+    "",
+    `R${totalMRCInternal.toFixed(2)}`,
+    "N/A",
+    "N/A",
+    "N/A",
+  ]);
+
+  const csvContent =
+    [headers.join(","), ...rows.map((row) => row.join(","))].join("\n");
+
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", "vendor_report.csv");
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 };
+
 
 const exportToExcel = () => {
   const rows = vendorCircuits.map((c) => {
-    const gp = c.sellingPrice - c.mrc;
-    const margin = c.sellingPrice ? ((gp / c.sellingPrice) * 100).toFixed(1) : "0";
-    const formatDate = (dateStr) =>
-      dateStr
-        ? new Date(dateStr).toLocaleDateString('en-GB', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-          })
-        : 'N/A';
+    const gp = c.usageFlag === "Client" && c.sellingPrice != null
+      ? (c.sellingPrice - c.mrc).toFixed(2)
+      : "N/A";
+    const markup = c.usageFlag === "Client" && c.sellingPrice != null
+      ? ((gp / c.mrc) * 100).toFixed(1) + "%"
+      : "N/A";
 
     return {
-      "Circuit Number": c.circuitNumber,
+      "Circuit #": c.circuitNumber,
       "Type": c.circuitType,
       "Client": c.siteB_name,
+      "Usage": c.usageFlag,
       "Status": c.status,
-      "End Date": formatDate(c.endDate),
-      "MRC": c.mrc,
-      "Selling Price": c.sellingPrice,
-      "Gross Profit": gp,
-      "Margin %": parseFloat(margin),
+      "End Date": c.endDate ? new Date(c.endDate).toLocaleDateString("en-GB") : "N/A",
+      "Cost Price": `R${(Number(c.mrc) || 0).toFixed(2)}`,
+      "Selling Price": c.sellingPrice != null ? `R${Number(c.sellingPrice).toFixed(2)}` : "N/A",
+      "Gross Profit": gp !== "N/A" ? `R${gp}` : "N/A",
+      "GP %": markup,
     };
   });
 
-  const worksheet = XLSX.utils.json_to_sheet(rows);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Circuits");
-  const excelOutput = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
-  saveAs(new Blob([excelOutput], { type: "application/octet-stream" }), "circuits.xlsx");
+  const clientCircuits = vendorCircuits.filter(c => c.usageFlag === "Client" && c.sellingPrice != null);
+  const internalCircuits = vendorCircuits.filter(c => c.usageFlag === "Internal");
+
+  const totalMRCClient = clientCircuits.reduce((sum, c) => sum + Number(c.mrc), 0);
+  const totalSPClient = clientCircuits.reduce((sum, c) => sum + Number(c.sellingPrice), 0);
+  const totalGPClient = totalSPClient - totalMRCClient;
+  const totalMarkupClient = totalMRCClient ? ((totalGPClient / totalMRCClient) * 100).toFixed(1) + "%" : "0%";
+
+  const totalMRCInternal = internalCircuits.reduce((sum, c) => sum + Number(c.mrc), 0);
+
+  rows.push({
+    "Circuit #": "Total (Client)",
+    "Cost Price": `R${totalMRCClient.toFixed(2)}`,
+    "Selling Price": `R${totalSPClient.toFixed(2)}`,
+    "Gross Profit": `R${totalGPClient.toFixed(2)}`,
+    "GP %": totalMarkupClient,
+  });
+  rows.push({
+    "Circuit #": "Total (Internal)",
+    "Cost Price": `R${totalMRCInternal.toFixed(2)}`,
+    "Selling Price": "N/A",
+    "Gross Profit": "N/A",
+    "GP %": "N/A",
+  });
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  
+  // Set page setup for landscape orientation
+  ws['!pageSetup'] = { orientation: "landscape" };
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Vendor Report");
+  XLSX.writeFile(wb, "vendor_report.xlsx");
 };
 
+
+
 const exportToPDF = () => {
-  const doc = new jsPDF();
-  const tableColumn = [
-    "Circuit Number", "Type", "Client", "Status", "End Date",
-    "MRC", "Selling Price", "Gross Profit", "Margin %"
-  ];
+  const doc = new jsPDF({ orientation: "landscape" });
+  const currentDate = new Date().toLocaleDateString("en-GB");
 
-  const tableRows = [];
+  // Header
+  doc.setFontSize(14);
+  doc.setTextColor("#2563EB"); // Tailwind accent-blue
+  doc.text("Vendor Circuit Report - " + selectedVendor, 14, 15);
 
-  let totalMRC = 0;
-  let totalSelling = 0;
-  let totalGP = 0;
+  doc.setFontSize(10);
+  doc.setTextColor("#000000");
+  doc.text(`Date: ${currentDate}`, 190, 15, { align: "right" });
 
-  vendorCircuits.forEach((c) => {
+  // Prepare rows
+  const body = vendorCircuits.map((c) => {
     const mrc = Number(c.mrc) || 0;
-    const sellingPrice = Number(c.sellingPrice) || 0;
-    const gp = sellingPrice - mrc;
-    const margin = sellingPrice ? ((gp / sellingPrice) * 100).toFixed(1) : "0";
+    const sellingPrice = c.sellingPrice != null ? Number(c.sellingPrice) : null;
 
-    totalMRC += mrc;
-    totalSelling += sellingPrice;
-    totalGP += gp;
+    const isClient = c.usageFlag === "Client";
 
-    const formatDate = (dateStr) =>
-      dateStr
-        ? new Date(dateStr).toLocaleDateString('en-GB', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-          })
-        : 'N/A';
+    const gp = isClient && sellingPrice !== null
+      ? (sellingPrice - mrc).toFixed(2)
+      : "N/A";
 
-      tableRows.push([
-        c.circuitNumber || 'N/A',
-        c.circuitType || 'N/A',
-        c.siteB_name || 'N/A',
-        c.status || 'N/A',
-        formatDate(c.endDate),
-        `R${mrc.toFixed(2)}`,
-        `R${sellingPrice.toFixed(2)}`,
-        `R${gp.toFixed(2)}`,
-        `${margin}%`,
-      ]);
-    });
+    const markup = isClient && sellingPrice !== null
+      ? (((sellingPrice - mrc) / mrc) * 100).toFixed(1) + "%"
+      : "N/A";
 
-    const totalMargin = totalSelling
-      ? ((totalGP / totalSelling) * 100).toFixed(1)
-      : "0";
+    return [
+      c.circuitNumber || "",
+      c.circuitType || "",
+      c.siteB_name || "",
+      c.usageFlag || "",
+      c.status || "",
+      c.endDate
+        ? new Date(c.endDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+        : "N/A",
+      `R${mrc.toFixed(2)}`,
+      sellingPrice !== null ? `R${sellingPrice.toFixed(2)}` : "N/A",
+      gp,
+      markup,
+    ];
+  });
 
-    tableRows.push([
-      "Total", "", "", "", "",
-      `R${totalMRC.toFixed(2)}`,
-      `R${totalSelling.toFixed(2)}`,
-      `R${totalGP.toFixed(2)}`,
-      `${totalMargin}%`,
-    ]);
+  // Calculate totals for Client and Internal
+  const clientCircuits = vendorCircuits.filter(c => c.usageFlag === "Client" && c.sellingPrice != null);
+  const internalCircuits = vendorCircuits.filter(c => c.usageFlag === "Internal");
 
-    autoTable(doc, {
-      head: [tableColumn],
-      body: tableRows,
-      startY: 20,
-      styles: { fontSize: 9 },
-      headStyles: { fillColor: [240, 240, 240] },
-    });
+  const totalMRCClient = clientCircuits.reduce((sum, c) => sum + (Number(c.mrc) || 0), 0);
+  const totalSPClient = clientCircuits.reduce((sum, c) => sum + Number(c.sellingPrice), 0);
+  const totalGPClient = totalSPClient - totalMRCClient;
+  const totalMarkupClient = totalMRCClient ? ((totalGPClient / totalMRCClient) * 100).toFixed(1) + "%" : "0%";
 
-    doc.save("vendor-circuits.pdf");
-  };
+  const totalMRCInternal = internalCircuits.reduce((sum, c) => sum + (Number(c.mrc) || 0), 0);
 
+  // Add total rows
+  body.push([
+    "Total (Client)", "", "", "", "", "",
+    `R${totalMRCClient.toFixed(2)}`,
+    `R${totalSPClient.toFixed(2)}`,
+    `R${totalGPClient.toFixed(2)}`,
+    totalMarkupClient,
+  ]);
+  body.push([
+    "Total (Internal)", "", "", "", "", "",
+    `R${totalMRCInternal.toFixed(2)}`,
+    "N/A",
+    "N/A",
+    "N/A",
+  ]);
+
+  autoTable(doc, {
+    head: [["Circuit #", "Type", "Client", "Usage", "Status", "End Date", "Cost Price", "Selling Price", "Gross Profit", "Gross Profit %"]],
+    body,
+    startY: 25,
+  });
+
+  doc.save("vendor_report.pdf");
+};
 
   useEffect(() => {
     axios
@@ -260,67 +366,108 @@ const exportToPDF = () => {
                   <th>Circuit Number</th>
                   <th>Type</th>
                   <th>Client</th>
+                  <th>Usage</th>
                   <th>Status</th>
                   <th>End Date </th>
-                  <th>MRC</th>
+                  <th>Cost Price</th>
                   <th>Selling Price</th>
                   <th>Gross Profit</th>
-                  <th>Margin %</th>
+                  <th>Gross Profit %</th>
                 </tr>
               </thead>
               <tbody>
                 {vendorCircuits.map((c, idx) => {
-                  const gp = c.sellingPrice - c.mrc;
-                  const margin = c.sellingPrice ? ((gp / c.sellingPrice) * 100).toFixed(1) : "0";
+                  const isClient = c.usageFlag === 'Client';
+                  const gp = isClient ? (c.sellingPrice - c.mrc).toFixed(2) : null;
+                  const markup = isClient
+                    ? ((gp / c.mrc) * 100).toFixed(1)
+                    : null;
 
                   return (
                     <tr key={idx} className="hover">
                       <td>{c.circuitNumber}</td>
                       <td>{c.circuitType}</td>
                       <td>{c.siteB_name}</td>
+                      <td>{c.usageFlag}</td>
                       <td>{c.status}</td>
-                      <td>{c.endDate ?
-                                new Date(c.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) 
-                                : 'N/A'}</td>
+                      <td>
+                        {c.endDate
+                          ? new Date(c.endDate).toLocaleDateString('en-GB', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                            })
+                          : 'N/A'}
+                      </td>
                       <td>R{c.mrc}</td>
-                      <td>R{c.sellingPrice}</td>
-                      <td>R{gp}</td>
-                      <td>{margin}%</td>
+                      <td>{isClient && c.sellingPrice !== null ? `R${c.sellingPrice}` : 'N/A'}</td>
+                      <td>{isClient && gp !== null ? `R${gp}` : 'N/A'}</td>
+                      <td>{isClient && markup !== null ? `${markup}%` : 'N/A'}</td>
                     </tr>
                   );
                 })}
               </tbody>
               <tfoot className="bg-gray-100 dark:bg-gray-700 dark:text-gray-200 text-gray-800 font-semibold">
+                {/* Total - Client */}
                 <tr>
-                  <td colSpan={5}>Totals</td>
+                  <td colSpan={6}>Total (Client)</td>
                   <td>
                     R{Number(
-                      vendorCircuits.reduce((sum, c) => sum + (Number(c.mrc) || 0), 0)
+                      vendorCircuits
+                        .filter((c) => c.usageFlag === "Client")
+                        .reduce((sum, c) => sum + (Number(c.mrc) || 0), 0)
                     ).toFixed(2)}
                   </td>
                   <td>
                     R{Number(
-                      vendorCircuits.reduce((sum, c) => sum + (Number(c.sellingPrice) || 0), 0)
+                      vendorCircuits
+                        .filter((c) => c.usageFlag === "Client")
+                        .reduce((sum, c) => sum + (Number(c.sellingPrice) || 0), 0)
                     ).toFixed(2)}
                   </td>
                   <td>
                     R{Number(
-                      vendorCircuits.reduce((sum, c) => sum + ((Number(c.sellingPrice) || 0) - (Number(c.mrc) || 0)), 0)
+                      vendorCircuits
+                        .filter((c) => c.usageFlag === "Client")
+                        .reduce(
+                          (sum, c) =>
+                            sum + ((Number(c.sellingPrice) || 0) - (Number(c.mrc) || 0)),
+                          0
+                        )
                     ).toFixed(2)}
                   </td>
                   <td>
-                    {vendorCircuits.length > 0
-                      ? Number(
-                          vendorCircuits.reduce((sum, c) => {
-                            const mrc = Number(c.mrc) || 0;
-                            const sp = Number(c.sellingPrice) || 0;
-                            const gp = sp - mrc;
-                            const margin = sp ? (gp / sp) * 100 : 0;
-                            return sum + margin;
-                          }, 0) / vendorCircuits.length
-                        ).toFixed(1)
-                      : "0.0"}
-                    %
+                    {(() => {
+                      const clientCircuits = vendorCircuits.filter(
+                        (c) => c.usageFlag === "Client"
+                      );
+                      const totalMRC = clientCircuits.reduce(
+                        (sum, c) => sum + (Number(c.mrc) || 0),
+                        0
+                      );
+                      const totalSP = clientCircuits.reduce(
+                        (sum, c) => sum + (Number(c.sellingPrice) || 0),
+                        0
+                      );
+                      const totalGP = totalSP - totalMRC;
+                      const totalMarkup = totalMRC ? (totalGP / totalMRC) * 100 : 0;
+                      return `${totalMarkup.toFixed(1)}%`;
+                    })()}
+                  </td>
+                </tr>
+
+                {/* Total - Internal */}
+                <tr>
+                  <td colSpan={6}>Total (Internal)</td>
+                  <td>
+                    R{Number(
+                      vendorCircuits
+                        .filter((c) => c.usageFlag === "Internal")
+                        .reduce((sum, c) => sum + (Number(c.mrc) || 0), 0)
+                    ).toFixed(2)}
+                  </td>
+                  <td colSpan={3} className="text-center">
+                    N/A
                   </td>
                 </tr>
               </tfoot>
