@@ -307,6 +307,12 @@ def circuits_grouped_by_vendor_and_type():
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+@app.route('/api/dashboard/vendor/<vendor_name>', methods=['GET'])
+@jwt_required()
+def get_vendor_circuits(vendor_name):
+    circuits = db.get_circuits_by_vendor(vendor_name)  # write this function
+    return jsonify(circuits)
 
 @app.route('/api/circuits', methods=['GET', 'POST'])
 @jwt_required()
