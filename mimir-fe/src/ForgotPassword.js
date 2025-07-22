@@ -11,7 +11,7 @@ export default function ForgotPassword() {
     e.preventDefault();
 
     try {
-        const res = await axios.post('/api/forgot-password', { email });
+        const res = await axios.post('/mimir/api/forgot-password', { email });
         alert(res.data.message);
         navigate('/login');
   } catch (err) {

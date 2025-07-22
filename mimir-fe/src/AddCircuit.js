@@ -126,8 +126,32 @@ const AddCircuit = () => {
         };
 
         try {
-            // 2. Submit form data first
-            const saveRes = await axios.post('/api/circuits/addcircuit', circuitData, {
+            // Upload the file first
+            await axios.post('/mimir/api/upload', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+                withCredentials: true
+            });
+            // console.log('Form submitted:', response.data);
+            
+            // Submit the rest of the form data
+            await axios.post('/mimir/api/circuits/addcircuit', {
+                vendor,
+                circuittype: circuitType,
+                speed,
+                circuitNumber,
+                circuitOwner,
+                enni: vendor === 'DFA' || vendor === 'Ikeja' ? enni : null,
+                vlan: vendor === 'DFA' || vendor === 'Ikeja' ? vlan : null,
+                startDate,
+                contractTerm,
+                endDate,
+                mrc,
+                siteA_id: siteAId,
+                siteB_id: siteBId,
+                comments,
+                doc: fileInput.files[0]?.name || null
+            }, {
+
                 headers: { 'Content-Type': 'application/json' },
                 withCredentials: true
             });
@@ -287,17 +311,38 @@ const AddCircuit = () => {
                                         onClick={() => setCircuitOwner(circuitOwner === 'Aesir' ? 'Ikeja' : 'Aesir')}
                                     >
                                         <div
-                                        className={`absolute top-0 left-0 w-10 h-8 bg-white dark:bg-gray-600 rounded-full shadow-md transform transition-transform duration-300 ${
-                                            circuitOwner === 'Ikeja' ? 'translate-x-full' : 'translate-x-0'
-                                        }`}
-                                        />
-                                        <div className="absolute inset-0 flex items-center justify-between px-2 text-xs font-semibold pointer-events-none">
-                                        <span className={circuitOwner === 'Aesir' ? 'text-blue-600' : 'text-gray-400'}>
-                                            <img src="/aesirblue.png" alt="Aesir Logo" className="h-8 object-contain" />
-                                        </span>
-                                        <span className={circuitOwner === 'Ikeja' ? 'text-green-600' : 'text-gray-400'}>
-                                            <img src="/ikejalogo1.png" alt="Ikeja Logo" className="h-5 object-contain" />
-                                        </span>
+
+                                            className="relative w-20 h-8 bg-gray-200 dark:bg-gray-700 rounded-full cursor-pointer select-none"
+                                            onClick={() => setCircuitOwner(circuitOwner === 'Aesir' ? 'Ikeja' : 'Aesir')}>
+
+                                            {/* Slider knob */}
+                                            <div
+                                            className={`absolute top-0 left-0 w-10 h-8 bg-white dark:bg-gray-600 rounded-full shadow-md transform transition-transform duration-300 ${
+                                                circuitOwner === 'Ikeja' ? 'translate-x-full' : 'translate-x-0'
+                                            }`}/>
+
+                                            {/* Labels */}
+                                            <div className="absolute inset-0 flex items-center justify-between px-2 text-xs font-semibold pointer-events-none">
+                                                <span
+                                                    className={`transition-colors duration-200 ${
+                                                    circuitOwner === 'Aesir' ? 'text-blue-600' : 'text-gray-400'
+                                                    }`}>
+                                                    <img
+                                                        src="/mimir/aesirblue.png"
+                                                        alt="Aesir Logo"
+                                                        className="h-8 object-contain" />
+                                                </span>
+                                                <span
+                                                    className={`transition-colors duration-200 ${
+                                                    circuitOwner === 'Ikeja' ? 'text-green-600' : 'text-gray-400'
+                                                    }`}>
+                                                    <img
+                                                        src="/mimir/ikejalogo1.png"
+                                                        alt="Ikeja Logo"
+                                                        className="h-5 object-contain" />
+                                                </span>
+                                            </div>
+
                                         </div>
                                     </div>
                                 </div>
