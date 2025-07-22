@@ -308,6 +308,7 @@ const Circuits = () => {
                         <th>Site B</th>
                         {/* <th>Comments</th> */}
                         {/* <th>Handover Doc</th> */}
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
