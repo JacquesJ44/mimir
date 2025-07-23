@@ -9,6 +9,8 @@ from itsdangerous import URLSafeTimedSerializer
 from datetime import timedelta, datetime, timezone
 from threading import Thread
 from email.mime.text import MIMEText
+from decimal import Decimal, InvalidOperation
+
 import hashlib
 import binascii
 import json
@@ -56,75 +58,6 @@ serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
 
 jwt = JWTManager(app)
 mail = Mail(app)
-
-con = db.get_connection()
-
-cur = con.cursor()
-cur.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        id INT(5) PRIMARY KEY AUTO_INCREMENT,
-        name VARCHAR(50),
-        surname VARCHAR(50),
-        email VARCHAR(50) UNIQUE,
-        password VARCHAR(200)
-    )
- """)
-cur.execute("""   
-    CREATE TABLE IF NOT EXISTS sites (
-        id INT(5) PRIMARY KEY AUTO_INCREMENT,
-        site VARCHAR(50) UNIQUE,
-        reference VARCHAR(50),
-        latitude VARCHAR(50),
-        longitude VARCHAR(50),
-        building VARCHAR(100),
-        street VARCHAR(50),
-        number VARCHAR(20),
-        suburb VARCHAR(30),
-        city VARCHAR(30),
-        postcode VARCHAR(10),
-        province VARCHAR(30)
-    )
-""")
-cur.execute("""
-    CREATE TABLE IF NOT EXISTS circuits (
-        id INT(5) PRIMARY KEY AUTO_INCREMENT,
-        vendor VARCHAR(30),
-        circuitType VARCHAR(50),
-        speed VARCHAR(20),
-        circuitNumber VARCHAR(100),
-        circuitOwner VARCHAR(30),
-        enni VARCHAR(15),
-        vlan VARCHAR(15),
-        startDate DATE,
-        contractTerm VARCHAR(15),
-        endDate DATE,
-        mrc DECIMAL(10,2),
-        sellingPrice DECIMAL(10,2),
-        siteA INT,
-        siteB INT,
-        comments VARCHAR(1000),
-        status VARCHAR(20),
-        doc VARCHAR(200),
-        FOREIGN KEY (siteA) REFERENCES sites(id) ON DELETE RESTRICT ON UPDATE CASCADE,
-        FOREIGN KEY (siteB) REFERENCES sites(id) ON DELETE RESTRICT ON UPDATE CASCADE
-    )
-""")
-
-cur.execute("""
-    CREATE TABLE IF NOT EXISTS user_logs (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id VARCHAR(150) NOT NULL,
-    action VARCHAR(255) NOT NULL,
-    target_table VARCHAR(100),
-    target_id INT,
-    ip_address VARCHAR(45),
-    user_agent TEXT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    details TEXT
-    )
-""")
-
-con.close()
 
 # Hash the password
 def hash_password(password):
@@ -184,13 +117,12 @@ def send_reset_email(app, email, reset_url):
             print("Failed to send email:", e)
 
 def validate_decimal_field(value, field_name):
-    if not isinstance(value, str):
-        value = str(value)
-
-    if not DECIMAL_PATTERN.match(value):
+    if value in (None, ''):
+        return None  # allow NULLs
+    try:
+        return Decimal(value)
+    except (InvalidOperation, TypeError, ValueError):
         raise ValueError(f"{field_name} is not a valid decimal")
-
-    return f"{float(value):.2f}"
 
     # ROUTES
 
@@ -307,6 +239,12 @@ def circuits_grouped_by_vendor_and_type():
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+@app.route('/api/dashboard/vendor/<vendor_name>', methods=['GET'])
+@jwt_required()
+def get_vendor_circuits(vendor_name):
+    circuits = db.get_circuits_by_vendor(vendor_name)  # write this function
+    return jsonify(circuits)
 
 @app.route('/mimir/api/circuits', methods=['GET', 'POST'])
 @jwt_required()
@@ -380,12 +318,14 @@ def addcircuit():
 
     # Sanitize and format decimal values
     try:
-        mrc = float(data.get('mrc', 0))
-        data['mrc'] = f"{mrc:.2f}"
-        sellingPrice = float(data.get('sellingPrice', 0))
-        data['sellingPrice'] = f"{sellingPrice:.2f}"
-    except (ValueError, TypeError):
-        return make_response({"error": "Invalid decimal values"}, 400)
+        mrc_raw = data.get('mrc', '')
+        selling_raw = data.get('sellingPrice', '')
+
+        data['mrc'] = validate_decimal_field(mrc_raw, 'mrc')
+        data['sellingPrice'] = validate_decimal_field(selling_raw, 'sellingPrice')
+
+    except (ValueError, TypeError) as e:
+        return make_response({"error": f"Decimal validation error: {e}"}, 400)
 
     # Set status
     status = 'Active'
@@ -418,6 +358,7 @@ def addcircuit():
             data.get('speed'),
             data.get('circuitNumber'),
             data.get('circuitOwner'),
+            data.get('usageFlag'),
             data.get('enni'),
             data.get('vlan'),
             data.get('startDate'),
@@ -437,7 +378,7 @@ def addcircuit():
 
         # You can define your own fields list for logging
         details = describe_changes_log({}, data, fields=[
-            'vendor', 'circuitType', 'speed', 'circuitNumber', 'circuitOwner',
+            'vendor', 'circuitType', 'speed', 'circuitNumber', 'circuitOwner', 'usageFlag',
             'enni', 'vlan', 'startDate', 'contractTerm', 'endDate',
             'mrc', 'sellingPrice', 'siteA_id', 'siteB_id', 'status', 'comments', 'doc'
         ])
