@@ -127,7 +127,7 @@ const AddCircuit = () => {
 
         try {
             // 2. Submit form data first
-            const saveRes = await axios.post('/api/circuits/addcircuit', circuitData, {
+            const saveRes = await axios.post('/mimir/api/circuits/addcircuit', circuitData, {
                 headers: { 'Content-Type': 'application/json' },
                 withCredentials: true
             });
@@ -159,7 +159,7 @@ const AddCircuit = () => {
                 formData.append('doc', selectedFile);
 
                 try {
-                    await axios.post('/api/upload', formData, {
+                    await axios.post('/mimir/api/upload', formData, {
                         headers: { 'Content-Type': 'multipart/form-data' },
                             withCredentials: true
                     });
@@ -293,10 +293,10 @@ const AddCircuit = () => {
                                         />
                                         <div className="absolute inset-0 flex items-center justify-between px-2 text-xs font-semibold pointer-events-none">
                                         <span className={circuitOwner === 'Aesir' ? 'text-blue-600' : 'text-gray-400'}>
-                                            <img src="/aesirblue.png" alt="Aesir Logo" className="h-8 object-contain" />
+                                            <img src="/mimir/aesirblue.png" alt="Aesir Logo" className="h-8 object-contain" />
                                         </span>
                                         <span className={circuitOwner === 'Ikeja' ? 'text-green-600' : 'text-gray-400'}>
-                                            <img src="/ikejalogo1.png" alt="Ikeja Logo" className="h-5 object-contain" />
+                                            <img src="/mimir/ikejalogo1.png" alt="Ikeja Logo" className="h-5 object-contain" />
                                         </span>
                                         </div>
                                     </div>
