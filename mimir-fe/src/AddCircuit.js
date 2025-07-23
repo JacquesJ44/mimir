@@ -125,6 +125,9 @@ const AddCircuit = () => {
             doc: selectedFile?.name || null,
         };
 
+        try {
+            // 2. Submit form data first
+            const saveRes = await axios.post('/api/circuits/addcircuit', circuitData, {
                 headers: { 'Content-Type': 'application/json' },
                 withCredentials: true
             });
@@ -180,7 +183,7 @@ const AddCircuit = () => {
             }
         }
     };
-
+    
     // Working with dates to set the last day of the contract equal to first day plus the contract term
     const lastDay = (term) => {
         setContractTerm(term);
