@@ -2,7 +2,7 @@ import axios from "./AxiosInstance.js";
 import { useState, useEffect } from "react";
 import { Link } from 'react-router-dom';
 import moments from "moment";
-import { Building, Hash, User, CalendarDays, MapPin, ToggleRight, ListFilter, Plus, Cable, Microchip } from 'lucide-react';
+import { Building, Hash, User, CalendarDays, MapPin, ToggleRight, ListFilter, Plus, Cable, Microchip, BrushCleaning } from 'lucide-react';
 
 const Circuits = () => {
 
@@ -92,17 +92,16 @@ const Circuits = () => {
     }
 
     const handleClear = () => {
-        setFormData({
-        vendor: "",
-        circuitType: "",
-        circuitNumber: "",
-        circuitOwner: "",
-        endDate: "",
-        site: "",
-        enni: "",
-        status: "",
-        });
-    };
+        setVendor("");
+        setCircuitType("");
+        setCircuitNumber("");
+        setCircuitOwner("");
+        setEndDate("");
+        setSite("");
+        setEnni("");
+        setStatus("");
+        };
+
 
     return (         
         <div className="card-body bg-white dark:bg-gray-900 shadow-md rounded-md w-full max-w-8xl mx-auto p-6">
@@ -276,11 +275,11 @@ const Circuits = () => {
 
                 {/* Clear & Submit button */}
                 <div className="flex justify-end mt-6 gap-2">
-                    {/* <button type="button" className="btn btn-warning w-full sm:w-auto px-6 flex items-center gap-2"
+                    <button type="button" className="btn btn-warning w-full sm:w-auto px-6 flex items-center gap-2"
                         onClick={handleClear}
                     >
-                    Clear
-                    </button> */}
+                    <BrushCleaning size={18} /> Clear
+                    </button>
                     <button type="submit" className="btn btn-accent w-full sm:w-auto px-6 flex items-center gap-2">
                         <ListFilter size={18} /> Search
                     </button>
@@ -315,7 +314,7 @@ const Circuits = () => {
                                         ? 'purple'
                                         : c.status === 'Cancelling'
                                         ? 'yellow'
-                                        : today.isBefore(c.endDate)
+                                        : today.isBefore(c.endDate) || c.endDate === null
                                         ? 'green'
                                         : 'red',
                                 }}

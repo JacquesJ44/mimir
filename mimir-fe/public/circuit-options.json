@@ -55,6 +55,7 @@
   ],
 
   "contractTerms": [
+    { "label": "Month to Month", "value": "Month-to-Month" },
     { "label": "12 Months", "value": 12 },
     { "label": "24 Months", "value": 24 },
     { "label": "36 Months", "value": 36 },

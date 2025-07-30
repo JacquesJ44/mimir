@@ -116,7 +116,7 @@ const AddCircuit = () => {
             vlan: vendor === 'DFA' || vendor === 'Ikeja' ? vlan : null,
             startDate,
             contractTerm,
-            endDate,
+            endDate: vendor === 'Wondernet' ? null : endDate,
             mrc,
             sellingPrice: usageFlag === 'Client' ? sellingPrice : null,
             siteA_id: siteAId,
@@ -247,20 +247,25 @@ const AddCircuit = () => {
                                             })}
                                     </select>
                                 </div>
+                                
 
-                                <div className="form-control">
-                                    <label htmlFor="speed" className="label">
-                                        <span className="label-text">Speed</span>
-                                    </label>
-                                    <select value = { speed } onChange={(e) => setSpeed(e.target.value)} id="speed" className="input input-bordered w-full">
-                                    <option value=''>Choose an option...</option>
-                                            {speeds.map((s, index) => {
-                                                return (
-                                                    <option key={index} value={s.value}>{s.label}</option>
-                                                )
-                                            })}
-                                    </select>
-                                </div>
+                                {/*  Display only if Vendor is set to 'Wondernet */}
+                                { vendor !== 'Wondernet' &&  (
+                                // <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                    <>
+                                        <div className="form-control">
+                                            <label htmlFor="speed" className="label">
+                                                <span className="label-text">Speed</span>
+                                            </label>
+                                            <select value = { speed } onChange={(e) => setSpeed(e.target.value)} id="speed" className="input input-bordered w-full">
+                                            <option value=''>Choose an option...</option>
+                                                    {speeds.map((e, index) => {
+                                                        return (
+                                                            <option key={index} value={e.value}>{e.label}</option>
+                                                        )
+                                                    })}
+                                            </select>
+                                        </div>
 
                                 <div className="form-control">
                                     <label className="label">
@@ -274,6 +279,8 @@ const AddCircuit = () => {
                                         onChange={(e) => setCircuitNumber(e.target.value)} 
                                         />
                                 </div>
+                            </>
+                                )}
                             </div>
 
                             {/* Row 2 - Circuit Owner */}
@@ -398,6 +405,8 @@ const AddCircuit = () => {
                                 </div>
 
                                 {/* End Date (Row 3, Col 3) */}
+                                { contractTerm !== "Month-to-Month" && (
+
                                 <div className="form-control col-span-1">
                                 <label className="label">
                                     <span className="label-text">Last Day of Contract</span>
@@ -411,6 +420,7 @@ const AddCircuit = () => {
                                 />
                                 </div>
 
+                                )}
                                 {/* MRC (Row 4, Col 1) */}
                                 <div className="form-control col-span-1">
                                 <label className="label">
