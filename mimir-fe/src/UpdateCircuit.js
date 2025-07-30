@@ -1,12 +1,13 @@
 import axios from "./AxiosInstance.js";
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { addMonths, subDays, parseISO, format } from 'date-fns';
+import { addMonths, subDays, parseISO, format, set } from 'date-fns';
 
 const UpdateCircuit = () => {
 
     // The below is read from circuit-options.json file and loaded on the page with useEffect 
     const [speeds, setSpeeds] = useState([]);
+    const [circuitTypes, setCircuitTypes] = useState([]);
     const [contractTerms, setContractTerms] = useState([]);
     const [ennis, setEnnis] = useState([]);
 
@@ -14,6 +15,12 @@ const UpdateCircuit = () => {
         fetch("/circuit-options.json")
             .then((res) => res.json())
             .then((data) => {
+            const wondernet = data.vendors.find(v => v.vendor === "Wondernet");
+                if (wondernet) {
+                    setCircuitTypes(
+                        wondernet.type.map(t => ({ value: t, label: t }))
+                    );
+                }
             setSpeeds(data.speeds);
             setContractTerms(data.contractTerms);
             setEnnis(data.ennis);
@@ -28,6 +35,7 @@ const UpdateCircuit = () => {
     const [data, setData] = useState([{}])
     
     // Main form data variables (controlled)
+    const [circuitType, setCircuitType] = useState('');
     const [speed, setSpeed] = useState('');
     const [enni, setEnni] = useState('');
     const [vlan, setVlan] = useState('');
@@ -72,6 +80,7 @@ const UpdateCircuit = () => {
                 console.log(circuit);
                 setData(circuit);
                 setSpeed(circuit.speed || '');
+                setCircuitType(circuit.circuitType || '');
                 setEnni(circuit.enni || '');
                 setVlan(circuit.vlan || '');
                 setStartDate(circuit.startDate ? new Date(circuit.startDate).toISOString().split('T')[0] : '');
@@ -119,9 +128,10 @@ const UpdateCircuit = () => {
 
             const circuitData = {
                 speed,
+                circuitType,
                 startDate,
                 contractTerm,
-                endDate,
+                endDate: data.vendor === 'Wondernet' ? null : endDate,
                 enni,
                 vlan,
                 mrc,
@@ -207,21 +217,37 @@ const UpdateCircuit = () => {
                                 </select>
                             </div>
 
-                            <div className="form-control">
-                                <label htmlFor="speed" className="label">
-                                    <span className="label-text">Speed</span>
-                                </label>
-                                <select value={speed} onChange={(e) => setSpeed(e.target.value)} id="speed" className="input input-bordered w-full">
-                                <option value="" disabled>Select Speed</option>
-                                        {speeds.map((s, index) => {
-                                            return (
-                                                <option key={index} value={s.value}>{s.label}</option>
-                                            )
-                                        })}
-                                </select>
-                            </div>
+                            { data.vendor === 'Wondernet' ? (
+                                <div className="form-control">
+                                    <label htmlFor="circuitType" className="label">
+                                        <span className="label-text">Circuit Type</span>
+                                    </label>
+                                    <select value={circuitType} onChange={(e) => setCircuitType(e.target.value)} id="circuitType" className="input input-bordered w-full">
+                                    <option value="" disabled>Choose an option...</option>
+                                            {circuitTypes?.map((c, index) => {
+                                                return (
+                                                    <option key={index} value={c.value}>{c.label}</option>
+                                                )
+                                            })}
+                                    </select>
+                                </div>
+                                ):(
+                                <div className="form-control">
+                                    <label htmlFor="speed" className="label">
+                                        <span className="label-text">Speed</span>
+                                    </label>
+                                    <select value={speed} onChange={(e) => setSpeed(e.target.value)} id="speed" className="input input-bordered w-full">
+                                    <option value="" disabled>Select Speed</option>
+                                            {speeds.map((s, index) => {
+                                                return (
+                                                    <option key={index} value={s.value}>{s.label}</option>
+                                                )
+                                            })}
+                                    </select>
+                                </div>
+                            )}
 
-                        {/* Display only if Vendor is set to 'DFA' */}
+                        {/* Display only if Vendor is set to 'DFA' or 'Ikeja' */}
                         { (data.vendor === 'DFA' || data.vendor === 'Ikeja') &&
                         <>
                             <div className="form-control">
@@ -253,6 +279,7 @@ const UpdateCircuit = () => {
                         </div>
 
                         {/* Row 2 */}
+                        { data.vendor !== 'Wondernet' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {/* Start Date */}
                             <div className="form-control">
@@ -301,6 +328,7 @@ const UpdateCircuit = () => {
                                 />
                             </div>
                         </div>
+                        )}
 
                         {/* Row 3-5 Layout with Profit Tool, Notes, and Calculator */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
