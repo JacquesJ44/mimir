@@ -50,7 +50,8 @@ const ViewCircuit = () => {
                     <strong>Contract Start:  </strong>{data.startDate ?
                             new Date(data.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) 
                             : 'N/A'}<br/>
-                    <strong>Contract Term:  </strong>{ data.contractTerm } months<br/>
+                    <strong>Contract Term:  </strong> 
+                        {data.contractTerm === "Month-to-Month" ? 'Month-to-Month' : `${data.contractTerm} months`}<br/>
                     <strong>Contract End: </strong>{data.endDate ?
                             new Date(data.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) 
                             : 'N/A'}<br/>
