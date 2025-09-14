@@ -143,26 +143,30 @@ const UpdateCircuit = () => {
             
             // 🔎 1. Validate and send circuit data first
             try {
-
-                const res = await axios.put(`/mimir/api/circuits/updatecircuit/${id}`, circuitData, {
-                    headers: { 'Content-Type': 'application/json' },
-                    withCredentials: true
-                });
-
-
-                    // ✅ 3. Navigate away after brief delay
-                    setTimeout(() => navigate('/circuits'), 1500);
-                } else if (res.status === 204) {
-                    console.log('No changes made to the circuit.');
+            const res = await axios.put(
+                `/mimir/api/circuits/updatecircuit/${id}`,
+                circuitData,
+                {
+                headers: { 'Content-Type': 'application/json' },
+                withCredentials: true,
                 }
-            } catch (err) {
-                console.error('Failed to update circuit:', err);
+            );
 
-                // Show backend error message in alert
-                const errorMsg = err.response?.data?.error || 'Failed to update circuit.';
-                alert(errorMsg);
+            if (res.status === 200) {
+                // ✅ 3. Navigate away after brief delay
+                setTimeout(() => navigate('/circuits'), 1500);
+            } else if (res.status === 204) {
+                console.log('No changes made to the circuit.');
+            }
+            } catch (err) {
+            console.error('Failed to update circuit:', err);
+
+            // Show backend error message in alert
+            const errorMsg = err.response?.data?.error || 'Failed to update circuit.';
+            alert(errorMsg);
             }
         };
+
     
     // Working with dates to set the last day of the contract equal to first day plus the contract term
     const lastDay = (term) => {
