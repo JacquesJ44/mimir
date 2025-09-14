@@ -17,7 +17,7 @@ const SiteSelector = ({ label, value, setValue, setId }) => {
       }
       try {
         const response = await axios.post(
-          "/mimir/api/getsite",
+          "/api/getsite",
           { site: debouncedInput },
           {
             headers: { "Content-Type": "application/json" },
