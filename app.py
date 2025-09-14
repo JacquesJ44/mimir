@@ -33,7 +33,7 @@ db = DbUtil({
 })
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-REACT_BUILD_DIR = os.path.join(BASE_DIR, "heimdall-fe", "build")
+REACT_BUILD_DIR = os.path.join(BASE_DIR, "mimir-fe", "build")
 UPLOAD_FOLDER = './docs'
 ALLOWED_EXTENSIONS = set(['pdf'])
 DECIMAL_PATTERN = re.compile(r'^\d+(\.\d{1,2})?$')

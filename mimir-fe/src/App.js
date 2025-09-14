@@ -23,7 +23,7 @@ function App() {
   const [message, setMessage] = useState('');
 
   return (
-    <BrowserRouter basename='/mimir'>
+    <BrowserRouter>
       <div className="min-h-screen flex flex-col bg-base-200">
         <Navbar token={token} setToken={setToken} message={message} setMessage={setMessage}/>
         
