@@ -606,7 +606,7 @@ def view_logs():
 @app.route("/<path:path>")
 def serve(path):
     # If the path starts with 'api', let Flask handle it
-    if path.startswith("api/"):
+    if path.startswith("api"):
         return "Not Found", 404  # This forces Flask to look for actual API routes
     
     # Serve actual static files if they exist
@@ -619,4 +619,4 @@ def serve(path):
 
 
 if __name__ == '__main__':
-    app.run(hots='0.0.0.0', port=5000)
+    app.run(hots='0.0.0.0', port=5001)

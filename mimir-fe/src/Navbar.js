@@ -53,7 +53,7 @@ const Navbar = ({ token, setToken, message, setMessage }) => {
         <div className="navbar shadow-2xl bg-base-200 roundedborders">
         <div className="flex-1">
 
-            <img src="/mimir/aesirblue.png" className="App-logo" alt="logo" />
+            <img src="/aesirblue.png" className="App-logo" alt="logo" />
 
         </div>
 
