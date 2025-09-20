@@ -125,7 +125,6 @@ const UpdateCircuit = () => {
                 }
     
             // Submit the rest of the form data
-
             const circuitData = {
                 speed,
                 circuitType,
@@ -153,6 +152,7 @@ const UpdateCircuit = () => {
             );
 
             if (res.status === 200) {
+                setShowSuccess(true);
                 // ✅ 3. Navigate away after brief delay
                 setTimeout(() => navigate('/circuits'), 1500);
             } else if (res.status === 204) {

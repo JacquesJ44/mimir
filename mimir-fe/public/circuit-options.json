@@ -18,7 +18,7 @@
     },
     {
       "vendor": "Wondernet",
-      "type": ["Octotel 50/50Mbps FTTB", "Octotel 55/25Mbps FTTH", "Octotel 75/75Mbps FTTH", "Octotel 150/150Mbps FTTH", "Openserve 50/50Mbps FTTH", "Openserve 100/50Mbps FTTH", "Openserve 100/100Mbps FTTH", "Openserve 500/250Mbps FTTH", "Vumatel 50/50Mbps FTTH", "Vumatel 100/100Mbps FTTH", "Vumatel 200/200Mbps FTTH", "Vumatel 500/200Mbps FTTH", "Other"]
+      "type": ["Octotel 50/50Mbps FTTB", "Octotel 25/25Mbps FTTH", "Octotel 55/25Mbps FTTH", "Octotel 75/75Mbps FTTH", "Octotel 150/150Mbps FTTH", "Openserve 50/50Mbps FTTH", "Openserve 100/50Mbps FTTH", "Openserve 100/100Mbps FTTH", "Openserve 500/250Mbps FTTH", "Vumatel 50/50Mbps FTTH", "Vumatel 100/100Mbps FTTH", "Vumatel 200/200Mbps FTTH", "Vumatel 500/200Mbps FTTH", "Other"]
     }
   ],
 
