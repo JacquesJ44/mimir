@@ -61,6 +61,8 @@ const ViewCircuit = () => {
                     <strong>Selling Price:  </strong>R{ data.sellingPrice }<br/>
                     <strong>Comments:  </strong>{ data.comments }<br/>
                     <strong>Status:  </strong>{ data.status }<br/>
+                    <strong>Sales Person:  </strong>{ data.salesPerson }<br/>
+                    <strong>Commission:  </strong>{ data.commission }%<br/>
                     <strong>Document:
                       <button onClick={(e) => {setFile(true)}}>{ data.doc }</button>   
                     {/* <a href={file} target="_blank" rel='noopener noreferrer' >{ data.doc }</a> */}

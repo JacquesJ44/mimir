@@ -14,7 +14,7 @@
     },
     {
       "vendor": "Seacom",
-      "type": ["EIA via DFA Helios", "EIA via MTB", "EIA via Openserve", "EIA via Other", "BIA via MTB", "BIA via Octotel", "BIA via Openserve", "BIA via VO Connect", "BIA via Other"]
+      "type": ["EIA via DFA Helios", "EIA via DFA Broadband", "EIA via MTB", "EIA via Openserve", "EIA via Other", "BIA via MTB", "BIA via Octotel", "BIA via Openserve", "BIA via VO Connect", "BIA via Other"]
     },
     {
       "vendor": "Wondernet",
@@ -34,7 +34,9 @@
     { "label": "200Mbps", "value": "200Mbps" },
     { "label": "250Mbps", "value": "250Mbps" },
     { "label": "300Mbps", "value": "300Mbps" },
+    { "label": "350Mbps", "value": "350Mbps" },
     { "label": "400Mbps", "value": "400Mbps" },
+    { "label": "450Mbps", "value": "450Mbps" },
     { "label": "500Mbps", "value": "500Mbps" },
     { "label": "600Mbps", "value": "600Mbps" },
     { "label": "700Mbps", "value": "700Mbps" },
@@ -46,6 +48,7 @@
     { "label": "3Gbps", "value": "3Gbps" },
     { "label": "3.5Gbps", "value": "3.5Gbps" },
     { "label": "4Gbps", "value": "4Gbps" },
+    { "label": "4.5Gbps", "value": "4.5Gbps" },
     { "label": "5Gbps", "value": "5Gbps" },
     { "label": "6Gbps", "value": "6Gbps" },
     { "label": "7Gbps", "value": "7Gbps" },
@@ -62,13 +65,24 @@
     { "label": "60 Months", "value": 60 }
   ],
 
-    "ennis": [
-        { "label": "ENI11-0001059", "value": "ENI11-0001059" },
-        { "label": "ENI11-0001107", "value": "ENI11-0001107" },
-        { "label": "ENI21-0000123", "value": "ENI21-0000123" },
-        { "label": "GNI21-0000071", "value": "GNI21-0000071" },
-        { "label": "ENI11-0001122", "value": "ENI11-0001122" },
-        { "label": "ENI11-0006137", "value": "ENI11-0006137" },
-        { "label": "ENI21-0006085", "value": "ENI21-0006085" }
-    ]
+  "ennis": [
+      { "label": "ENI11-0001059", "value": "ENI11-0001059" },
+      { "label": "ENI11-0001107", "value": "ENI11-0001107" },
+      { "label": "ENI21-0000123", "value": "ENI21-0000123" },
+      { "label": "GNI21-0000071", "value": "GNI21-0000071" },
+      { "label": "ENI11-0001122", "value": "ENI11-0001122" },
+      { "label": "ENI11-0006137", "value": "ENI11-0006137" },
+      { "label": "ENI21-0006085", "value": "ENI21-0006085" }
+  ],
+
+  "salesPersons": [
+    { "label": "Andrew Owen-Jones", "value": "Andrew Owen-Jones" },
+    { "label": "Conrad Minnaar", "value": "Conrad Minnaar" },
+    { "label": "Tristan Nicholson", "value": "Tristan Nicholson" },
+    { "label": "Remeredzai Chazi", "value": "Remeredzai Chazi" },
+    { "label": "Jacques du Toit", "value": "Jacques du Toit" },
+    { "label": "Allen Chazi", "value": "Allen Chazi" },
+    { "label": "Andrew Verwey", "value": "Andrew Verwey" },
+    { "label": "Mark van Rooyen", "value": "Mark van Rooyen" }
+  ]
 }

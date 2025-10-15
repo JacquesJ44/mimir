@@ -10,6 +10,7 @@ const UpdateCircuit = () => {
     const [circuitTypes, setCircuitTypes] = useState([]);
     const [contractTerms, setContractTerms] = useState([]);
     const [ennis, setEnnis] = useState([]);
+    const [salesPersons, setSalesPersons] = useState([]);
 
     useEffect(() => {
         fetch("/circuit-options.json")
@@ -24,6 +25,7 @@ const UpdateCircuit = () => {
             setSpeeds(data.speeds);
             setContractTerms(data.contractTerms);
             setEnnis(data.ennis);
+            setSalesPersons(data.salesPersons);
             })
             .catch((err) => console.error("Failed to load options:", err));
     }, []);
@@ -47,6 +49,9 @@ const UpdateCircuit = () => {
     const [sellingPrice, setSellingPrice] = useState('');
     const [comments, setComments] = useState('');
     const [status, setStatus] = useState('');
+    const [salesPerson, setSalesPerson] = useState('');
+    const [commission, setCommission] = useState('');
+
     const [valueA, setValueA] = useState('');
     const [valueB, setValueB] = useState('');
     const [operation, setOperation] = useState('+');
@@ -77,7 +82,7 @@ const UpdateCircuit = () => {
             .then(res => {
                 const circuit = res.data;
                 // console.log('Fetched circuit status:', circuit.status);
-                console.log(circuit);
+                // console.log(circuit);
                 setData(circuit);
                 setSpeed(circuit.speed || '');
                 setCircuitType(circuit.circuitType || '');
@@ -92,6 +97,8 @@ const UpdateCircuit = () => {
                 setComments(circuit.comments || '');
                 setStatus(circuit.status || '');
                 setDoc(circuit.doc || '');
+                setSalesPerson(circuit.salesPerson || '');
+                setCommission(circuit.commission || '');
             })
             .catch(err => {
                 console.error('Error fetching circuit data:', err);
@@ -121,6 +128,8 @@ const UpdateCircuit = () => {
                 comments,
                 status,
                 doc: selectedFile?.name || doc || null, // optionally store filename
+                salesPerson: usageFlag === 'Client' ? salesPerson : null,
+                commission: usageFlag === 'Client' ? commission : null
             };
             
             // 🔎 1. Validate and send circuit data first
@@ -349,19 +358,49 @@ const UpdateCircuit = () => {
 
                             {/* Row 4 Col 1 - Selling Price, Display only if usageFlag is 'Client' */}
                             {usageFlag === 'Client' && (
-                            <div className="form-control col-span-1">
-                                <label className="label">
-                                    <span className="label-text">Selling Price (ex VAT)</span>    
-                                </label>
-                                <input
-                                    type="text"
-                                    className="input input-bordered w-full"
-                                    placeholder="R"
-                                    required
-                                    value={sellingPrice}
-                                    onChange={(e) => setSellingPrice(e.target.value)}
-                                />
-                            </div>
+                            <>
+                                <div className="form-control col-span-1">
+                                    <label className="label">
+                                        <span className="label-text">Selling Price (ex VAT)</span>    
+                                    </label>
+                                    <input
+                                        type="text"
+                                        className="input input-bordered w-full"
+                                        placeholder="R"
+                                        required
+                                        value={sellingPrice}
+                                        onChange={(e) => setSellingPrice(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="form-control">
+                                        <label htmlFor="salesPerson" className="label">
+                                            <span className="label-text">Sales Person</span>
+                                        </label>
+                                        <select value = { salesPerson } onChange={(e) => setSalesPerson(e.target.value)} id="salesPerson" className="input input-bordered w-full">
+                                        <option value=''>Choose an option...</option>
+                                                {salesPersons.map((s, index) => {
+                                                    return (
+                                                        <option key={index} value={s.value}>{s.label}</option>
+                                                    )
+                                                })}
+                                        </select>
+                                    </div>
+
+                                    <div className="form-control col-span-1">
+                                        <label className="label">
+                                            <span className="label-text">Commission (%)</span>
+                                        </label>
+                                        <input
+                                            className="input input-bordered w-full"
+                                            type="text"
+                                            placeholder="3.00"
+                                            // required
+                                            value={commission}
+                                            onChange={(e) => setCommission(e.target.value)}
+                                        />
+                                    </div>
+                            </>
                             )}
 
                             {/* Row 3-5 Col 3 - Profit Tool and Notes */}
