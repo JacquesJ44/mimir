@@ -323,6 +323,36 @@ const exportToPDF = () => {
     );
   };
 
+  const calculateTotalCommission = () => {
+    return vendorCircuits
+      .filter(c => c.usageFlag === "Client")
+      .reduce((sum, c) => {
+        const sellingPrice = Number(c.sellingPrice) || 0;
+        const commissionRate =
+          c.commission === "N/A" || c.commission == null
+            ? 0
+            : Number(c.commission);
+        const commission = sellingPrice * (commissionRate / 100);
+        return sum + commission;
+      }, 0);
+  };
+
+  const calculateTotalGpAfterCommission = () => {
+    return vendorCircuits
+      .filter(c => c.usageFlag === "Client")
+      .reduce((sum, c) => {
+        const sellingPrice = Number(c.sellingPrice) || 0;
+        const costPrice = Number(c.mrc) || 0;
+        const commissionRate =
+          c.commission === "N/A" || c.commission == null
+            ? 0
+            : Number(c.commission);
+        const commission = sellingPrice * (commissionRate / 100);
+        const gpAfterCommission = sellingPrice - costPrice - commission;
+        return sum + gpAfterCommission;
+      }, 0);
+  };
+
   return (
     <div className="w-screen px-4 py-6">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-6 w-full max-w-[1400px] mx-auto">
@@ -371,17 +401,21 @@ const exportToPDF = () => {
                   <th>End Date </th>
                   <th>Cost Price</th>
                   <th>Selling Price</th>
-                  <th>Gross Profit</th>
-                  <th>Gross Profit %</th>
+                  <th>GP</th>
+                  <th>GP %</th>
+                  <th>Sales Person</th>
+                  <th>Commission %</th>
+                  <th>Commission Value</th>
+                  <th>GP After Commission</th>
                 </tr>
               </thead>
               <tbody>
                 {vendorCircuits.map((c, idx) => {
                   const isClient = c.usageFlag === 'Client';
                   const gp = isClient ? (c.sellingPrice - c.mrc).toFixed(2) : null;
-                  const markup = isClient
-                    ? ((gp / c.mrc) * 100).toFixed(1)
-                    : null;
+                  const markup = isClient ? ((gp / c.mrc) * 100).toFixed(1) : null;
+                  const commissionValue = isClient && c.commission != null ? ((c.sellingPrice * c.commission) / 100).toFixed(2) : null;
+                  const gpAfterCommission = isClient && gp != null && commissionValue != null ? (gp - commissionValue).toFixed(2) : null;
 
                   return (
                     <tr key={idx} className="hover">
@@ -403,10 +437,15 @@ const exportToPDF = () => {
                       <td>{isClient && c.sellingPrice !== null ? `R${c.sellingPrice}` : 'N/A'}</td>
                       <td>{isClient && gp !== null ? `R${gp}` : 'N/A'}</td>
                       <td>{isClient && markup !== null ? `${markup}%` : 'N/A'}</td>
+                      <td>{isClient ? c.salesPerson || 'N/A' : 'N/A'}</td>
+                      <td>{isClient && c.commission !== null ? `${c.commission}%` : 'N/A'}</td>
+                      <td>{isClient && commissionValue !== null ? `R${commissionValue}` : 'N/A'}</td>
+                      <td>{isClient && gpAfterCommission !== null ? `R${gpAfterCommission}` : 'N/A'}</td>
                     </tr>
                   );
                 })}
               </tbody>
+
               <tfoot className="bg-gray-100 dark:bg-gray-700 dark:text-gray-200 text-gray-800 font-semibold">
                 {/* Total - Client */}
                 <tr>
@@ -436,7 +475,7 @@ const exportToPDF = () => {
                         )
                     ).toFixed(2)}
                   </td>
-                  <td>
+                  <td colSpan={3}>
                     {(() => {
                       const clientCircuits = vendorCircuits.filter(
                         (c) => c.usageFlag === "Client"
@@ -454,6 +493,8 @@ const exportToPDF = () => {
                       return `${totalMarkup.toFixed(1)}%`;
                     })()}
                   </td>
+                  <td>R{calculateTotalCommission().toFixed(2)}</td>
+                  <td>R{calculateTotalGpAfterCommission().toFixed(2)}</td>
                 </tr>
 
                 {/* Total - Internal */}

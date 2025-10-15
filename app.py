@@ -320,9 +320,11 @@ def addcircuit():
     try:
         mrc_raw = data.get('mrc', '')
         selling_raw = data.get('sellingPrice', '')
+        commission_raw = data.get('commission', '')
 
         data['mrc'] = validate_decimal_field(mrc_raw, 'mrc')
         data['sellingPrice'] = validate_decimal_field(selling_raw, 'sellingPrice')
+        data['commission'] = validate_decimal_field(commission_raw, 'commission')
 
     except (ValueError, TypeError) as e:
         return make_response({"error": f"Decimal validation error: {e}"}, 400)
@@ -370,7 +372,9 @@ def addcircuit():
             siteB_id,
             data.get('comments'),
             status,
-            filename
+            filename,
+            data.get('salesPerson'),
+            data['commission']
         )
 
         # ✅ Logging after successful insert
@@ -380,7 +384,7 @@ def addcircuit():
         details = describe_changes_log({}, data, fields=[
             'vendor', 'circuitType', 'speed', 'circuitNumber', 'circuitOwner', 'usageFlag',
             'enni', 'vlan', 'startDate', 'contractTerm', 'endDate',
-            'mrc', 'sellingPrice', 'siteA_id', 'siteB_id', 'status', 'comments', 'doc'
+            'mrc', 'sellingPrice', 'siteA_id', 'siteB_id', 'status', 'comments', 'doc', 'salesPerson', 'commission'
         ])
 
         # Log action
@@ -497,10 +501,11 @@ def update_circuit(id):
         try:
             mrc_raw = data.get('mrc', '')
             selling_raw = data.get('sellingPrice', '')
+            commission_raw = data.get('commission', '')
 
             data['mrc'] = validate_decimal_field(mrc_raw, 'mrc')
             data['sellingPrice'] = validate_decimal_field(selling_raw, 'sellingPrice')
-
+            data['commission'] = validate_decimal_field(commission_raw, 'commission')
         except (ValueError, TypeError) as e:
             return make_response({"error": f"Decimal validation error: {e}"}, 400)
 
@@ -534,7 +539,7 @@ def update_circuit(id):
                     old_data, data, fields=[
                         'vendor', 'circuitType', 'speed', 'circuitNumber', 'circuitOwner',
                         'enni', 'vlan', 'startDate', 'contractTerm', 'endDate',
-                        'mrc', 'sellingPrice', 'siteA_id', 'siteB_id', 'status', 'comments', 'doc'
+                        'mrc', 'sellingPrice', 'siteA_id', 'siteB_id', 'status', 'comments', 'doc', 'salesPerson', 'commission'
                     ]
                 )
 
