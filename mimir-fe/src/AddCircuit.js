@@ -1,7 +1,7 @@
 import axios from "./AxiosInstance.js"; 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { addMonths, subDays, parseISO, format } from 'date-fns';
+import { addMonths, subDays, parseISO, format, isValid, set } from 'date-fns';
 import SiteSelector from "./SiteSelector.js";
 
 const AddCircuit = () => {
@@ -12,6 +12,7 @@ const AddCircuit = () => {
     const [contractTerms, setContractTerms] = useState([]);
     const [ennis, setEnnis] = useState([]);
     const [circuitTypes, setCircuitTypes] = useState([]);
+    const [salesPersons, setSalesPersons] = useState([]);
 
     useEffect(() => {
         fetch("/circuit-options.json")
@@ -23,6 +24,13 @@ const AddCircuit = () => {
             setEnnis(data.ennis);
             })
             .catch((err) => console.error("Failed to load options:", err));
+
+        axios.get("/api/circuits/addcircuit")
+                .then((res) => {
+                setSalesPersons(res.data)
+                // console.log("Sales People:", res.data);
+            })
+            .catch((err) => console.error(err));
     }, []);
 
         const changeVendor = (e) => {
@@ -59,6 +67,8 @@ const AddCircuit = () => {
     const [siteB, setSiteB] = useState('');
     const [comments, setComments] = useState('');
     const [doc, setDoc] = useState('');
+    const [salesPerson, setSalesPerson] = useState('');
+    // const [commission, setCommission] = useState('');
 
     const [siteAId, setSiteAId] = useState(null);
     const [siteBId, setSiteBId] = useState(null);
@@ -123,6 +133,8 @@ const AddCircuit = () => {
             siteB_id: siteBId,
             comments,
             doc: selectedFile?.name || null,
+            salesPerson: usageFlag === 'Client' ? salesPerson : null,
+            // commission: usageFlag === 'Client' ? commission : null,
         };
 
         try {
@@ -157,6 +169,10 @@ const AddCircuit = () => {
                 formData.append('siteB_id', siteBId);
                 formData.append('comments', comments);
                 formData.append('doc', selectedFile);
+                if (usageFlag === 'Client') {
+                    formData.append('salesPerson', salesPerson);
+                    // formData.append('commission', commission);
+                }
 
                 try {
                     await axios.post('/api/upload', formData, {
@@ -185,30 +201,31 @@ const AddCircuit = () => {
     };
     
     // Working with dates to set the last day of the contract equal to first day plus the contract term
-    const lastDay = (term) => {
-        setContractTerm(term);
-
-        if (!startDate || !term) {
+    const lastDay = (termValue, startDateValue) => {
+        if (!startDateValue || !termValue) {
             setEndDate("");
+            setContractTerm(termValue);
             return;
         }
 
         try {
-            const parsedStart = parseISO(startDate); // assumes startDate is "YYYY-MM-DD"
-            const monthsToAdd = parseInt(term, 10);
+            const start = new Date(startDateValue);
+            if (isNaN(start)) return;
 
-            // Add months to startDate, then subtract 1 day to get "last day of contract"
-            const rawEnd = addMonths(parsedStart, monthsToAdd);
-            const finalEnd = subDays(rawEnd, 1); // Optional: Subtract 1 to match business expectations
+            const months = parseInt(termValue, 10);
+            if (isNaN(months)) return;
 
-            // Format to "YYYY-MM-DD"
-            const formatted = format(finalEnd, "yyyy-MM-dd");
-            setEndDate(formatted);
-        } catch (e) {
-            console.error("Invalid date logic:", e);
+            const end = new Date(start);
+            end.setMonth(end.getMonth() + months);
+            setEndDate(end.toISOString().split("T")[0]);
+            setContractTerm(termValue);
+
+        } catch (err) {
+            console.error("Invalid date logic:", err);
             setEndDate("");
         }
-    };
+        };
+
 
     return ( 
         
@@ -224,7 +241,7 @@ const AddCircuit = () => {
                                     <label htmlFor="vendor" className="label">
                                         <span className="label-text">Vendor</span>
                                     </label>
-                                    <select value={vendor} onChange={changeVendor} id="vendor" className="input input-bordered w-full">
+                                    <select value={vendor} onChange={changeVendor} id="vendor" className="input input-bordered w-full" required>
                                         <option value=''>Choose an option...</option>
                                             {vendors.map((v, index) => {
                                                 return (
@@ -238,7 +255,7 @@ const AddCircuit = () => {
                                     <label htmlFor="circuitType" className="label">
                                         <span className="label-text">Circuit Type</span>
                                     </label>
-                                    <select value={circuitType} onChange={changeCircuitType} id="circuitType" className="input input-bordered w-full">
+                                    <select value={circuitType} onChange={changeCircuitType} id="circuitType" className="input input-bordered w-full" required>
                                     <option value=''>Choose an option...</option>
                                             {circuitTypes.map((c, index) => {
                                                 return (
@@ -382,9 +399,18 @@ const AddCircuit = () => {
                                     className="input input-bordered w-full"
                                     required
                                     value={startDate}
-                                    onChange={(e) => setStartDate(e.target.value)}
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+                                        setStartDate(value);
+
+                                        if (contractTerm && value) {
+                                            lastDay(contractTerm, value);
+                                        } else {
+                                            setEndDate("");
+                                        }
+                                    }}
                                 />
-                                </div>
+                            </div>
 
                                 {/* Contract Term (Row 3, Col 2) */}
                                 <div className="form-control col-span-1">
@@ -393,7 +419,7 @@ const AddCircuit = () => {
                                 </label>
                                 <select
                                     value={contractTerm}
-                                    onChange={(e) => lastDay(e.target.value)}
+                                    onChange={(e) => lastDay(e.target.value, startDate)}
                                     className="input input-bordered w-full"
                                     required
                                     >
@@ -517,22 +543,53 @@ const AddCircuit = () => {
                                     </div>
                                 </div>
 
-                                {/* Selling Price (Row 5, Col 1) - Display only for usageFlag === 'Client' */}
+                                {/* Selling Price, Sales Person, Commission (Row 5,6,7 Col 1) - Display only for usageFlag === 'Client' */}
                                 {usageFlag === 'Client' && (
-                                <div className="form-control col-span-1">
-                                <label className="label">
-                                    <span className="label-text">Selling Price (ex VAT)</span>
-                                </label>
-                                <input
-                                    className="input input-bordered w-full"
-                                    type="text"
-                                    placeholder="R"
-                                    required
-                                    value={sellingPrice}
-                                    onChange={(e) => setSellingPrice(e.target.value)}
-                                />
-                                </div>
+                                <>
+                                    <div className="form-control col-span-1">
+                                        <label className="label">
+                                            <span className="label-text">Selling Price (ex VAT)</span>
+                                        </label>
+                                        <input
+                                            className="input input-bordered w-full"
+                                            type="text"
+                                            placeholder="R"
+                                            required
+                                            value={sellingPrice}
+                                            onChange={(e) => setSellingPrice(e.target.value)}
+                                        />
+                                    </div>
+
+                                    <div className="form-control">
+                                        <label htmlFor="salesPerson" className="label">
+                                            <span className="label-text">Sales Person</span>
+                                        </label>
+                                        <select value = { salesPerson } onChange={(e) => setSalesPerson(e.target.value)} id="salesPerson" className="input input-bordered w-full">
+                                        <option value=''>Choose an option...</option>
+                                                {salesPersons.map((s) => {
+                                                    return (
+                                                        <option key={s.id} value={s.id}>{s.name} {s.surname}</option>
+                                                    )
+                                                })}
+                                        </select>
+                                    </div>
+
+                                    {/* <div className="form-control col-span-1">
+                                        <label className="label">
+                                            <span className="label-text">Commission (%)</span>
+                                        </label>
+                                        <input
+                                            className="input input-bordered w-full"
+                                            type="text"
+                                            placeholder="3.00"
+                                            // required
+                                            value={commission}
+                                            onChange={(e) => setCommission(e.target.value)}
+                                        />
+                                    </div> */}
+                                </>
                                 )}
+
                                 <div className="form-control col-span-1">
                                     <SiteSelector
                                         label="Site A"
@@ -551,11 +608,6 @@ const AddCircuit = () => {
                                     />
                                 </div>
                             </div>
-
-                            {/* Row 6 - Site A, Site B */}
-                            {/* <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                                
-                            </div> */}
 
                             {/* Row 8 - Additional Comments, Handover Doc */}
                             <div className="form-control">

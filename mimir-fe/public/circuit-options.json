@@ -14,11 +14,19 @@
     },
     {
       "vendor": "Seacom",
-      "type": ["EIA via DFA Helios", "EIA via MTB", "EIA via Openserve", "EIA via Other", "BIA via MTB", "BIA via Octotel", "BIA via Openserve", "BIA via VO Connect", "BIA via Other"]
+      "type": ["EIA via DFA Helios", "EIA via DFA Broadband", "EIA via MTB", "EIA via Openserve", "EIA via Other", "BIA via MTB", "BIA via Octotel", "BIA via Openserve", "BIA via VO Connect", "BIA via Other"]
     },
     {
       "vendor": "Wondernet",
-      "type": ["Octotel 50/50Mbps FTTB", "Octotel 25/25Mbps FTTH", "Octotel 55/25Mbps FTTH", "Octotel 75/75Mbps FTTH", "Octotel 150/150Mbps FTTH", "Openserve 50/50Mbps FTTH", "Openserve 100/50Mbps FTTH", "Openserve 100/100Mbps FTTH", "Openserve 500/250Mbps FTTH", "Vumatel 50/50Mbps FTTH", "Vumatel 100/100Mbps FTTH", "Vumatel 200/200Mbps FTTH", "Vumatel 500/200Mbps FTTH", "Other"]
+      "type": ["Octotel 50/50Mbps FTTB", "Octotel 55/25Mbps FTTH", "Octotel 75/75Mbps FTTH", "Octotel 150/150Mbps FTTH", "Openserve 50/50Mbps FTTH", "Openserve 100/50Mbps FTTH", "Openserve 100/100Mbps FTTH", "Openserve 500/250Mbps FTTH", "Vumatel 50/50Mbps FTTH", "Vumatel 100/100Mbps FTTH", "Vumatel 200/200Mbps FTTH", "Vumatel 500/200Mbps FTTH", "Other"]
+    },
+    {
+      "vendor": "Faircom",
+      "type": ["Other"]
+    },
+    {
+      "vendor": "Evolve Internet",
+      "type": ["Other"]
     }
   ],
 
@@ -34,7 +42,9 @@
     { "label": "200Mbps", "value": "200Mbps" },
     { "label": "250Mbps", "value": "250Mbps" },
     { "label": "300Mbps", "value": "300Mbps" },
+    { "label": "350Mbps", "value": "350Mbps" },
     { "label": "400Mbps", "value": "400Mbps" },
+    { "label": "450Mbps", "value": "450Mbps" },
     { "label": "500Mbps", "value": "500Mbps" },
     { "label": "600Mbps", "value": "600Mbps" },
     { "label": "700Mbps", "value": "700Mbps" },
@@ -46,6 +56,7 @@
     { "label": "3Gbps", "value": "3Gbps" },
     { "label": "3.5Gbps", "value": "3.5Gbps" },
     { "label": "4Gbps", "value": "4Gbps" },
+    { "label": "4.5Gbps", "value": "4.5Gbps" },
     { "label": "5Gbps", "value": "5Gbps" },
     { "label": "6Gbps", "value": "6Gbps" },
     { "label": "7Gbps", "value": "7Gbps" },
@@ -55,20 +66,20 @@
   ],
 
   "contractTerms": [
-    { "label": "Month to Month", "value": "Month-to-Month" },
+    { "label": "Month to Month", "value": 0 },
     { "label": "12 Months", "value": 12 },
     { "label": "24 Months", "value": 24 },
     { "label": "36 Months", "value": 36 },
     { "label": "60 Months", "value": 60 }
   ],
 
-    "ennis": [
-        { "label": "ENI11-0001059", "value": "ENI11-0001059" },
-        { "label": "ENI11-0001107", "value": "ENI11-0001107" },
-        { "label": "ENI21-0000123", "value": "ENI21-0000123" },
-        { "label": "GNI21-0000071", "value": "GNI21-0000071" },
-        { "label": "ENI11-0001122", "value": "ENI11-0001122" },
-        { "label": "ENI11-0006137", "value": "ENI11-0006137" },
-        { "label": "ENI21-0006085", "value": "ENI21-0006085" }
-    ]
+  "ennis": [
+      { "label": "ENI11-0001059", "value": "ENI11-0001059" },
+      { "label": "ENI11-0001107", "value": "ENI11-0001107" },
+      { "label": "ENI21-0000123", "value": "ENI21-0000123" },
+      { "label": "GNI21-0000071", "value": "GNI21-0000071" },
+      { "label": "ENI11-0001122", "value": "ENI11-0001122" },
+      { "label": "ENI11-0006137", "value": "ENI11-0006137" },
+      { "label": "ENI21-0006085", "value": "ENI21-0006085" }
+  ]
 }

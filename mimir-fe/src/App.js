@@ -16,6 +16,8 @@ import ViewCircuit from './ViewCircuit';
 import UpdateCircuit from './UpdateCircuit';
 import Register from './Register';
 import Dashboard from './Dashboard';
+import LogsPage from './Logs';
+import Commission from './Commission';
 
 function App() {
 
@@ -68,6 +70,12 @@ function App() {
 
             <Route path='/register' element={<PrivateRoute>
                                       <Register />
+                                    </PrivateRoute>} />
+            <Route path='/logs' element={<PrivateRoute>
+                                      <LogsPage />
+                                    </PrivateRoute>} />
+            <Route path='/commission' element={<PrivateRoute>
+                                      <Commission />
                                     </PrivateRoute>} />
           </Routes>
         </div> 

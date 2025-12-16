@@ -1,6 +1,6 @@
 from flask import Flask
 from flask import jsonify, request, make_response, send_file, send_from_directory
-from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, unset_jwt_cookies, jwt_required, JWTManager
+from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, unset_jwt_cookies, jwt_required, JWTManager, verify_jwt_in_request
 from flask_cors import CORS
 from flask_mail import Mail, Message
 from dotenv import load_dotenv
@@ -10,6 +10,7 @@ from datetime import timedelta, datetime, timezone
 from threading import Thread
 from email.mime.text import MIMEText
 from decimal import Decimal, InvalidOperation
+from functools import wraps
 
 import hashlib
 import binascii
@@ -67,6 +68,28 @@ serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
 
 jwt = JWTManager(app)
 mail = Mail(app)
+
+# USER BASED ROLES ARE DEFINED AS FOLLOWS:
+# admin - full access
+# technician - add/edit circuits and sites
+# sales - add/edit circuits and sites, view dashboard,
+# finance - view dashboard, commissions
+
+# Role-based access control decorator
+def role_required(required_roles):
+    def wrapper(fn):
+        @wraps(fn)
+        def decorator(*args, **kwargs):
+            verify_jwt_in_request()
+            claims = get_jwt()
+            user_role = claims.get("role")
+
+            if user_role not in required_roles:
+                return jsonify(msg="Insufficient permissions"), 403
+
+            return fn(*args, **kwargs)
+        return decorator
+    return wrapper
 
 # Hash the password
 def hash_password(password):
@@ -142,32 +165,43 @@ def login():
         return jsonify({"msg": "Invalid request: JSON required"}), 400
     
     data = request.get_json()
+    email = data.get('email')
+    password = data.get('password')
     # pprint(data)
     
-    row = db.get_user_by_email(data['email'])
+    row = db.get_user_by_email(email)
     # pprint(row)
 
     if not row:
        return jsonify({"msg": "User with this email does not exist"}), 400
 
-    if not verify_password(row[4], data['password']):
+    if not verify_password(row['password'], password):
         return jsonify({"msg": "Invalid credentials"}), 401
     
-    access_token = create_access_token(identity=data['email'])
+    # ✅ Include role + email in JWT claims
+    access_token = create_access_token(
+                                        identity=str(row['id']),
+                                        additional_claims={
+                                            "email": row['email'],
+                                            "role": row['role']
+                                        },
+                                        expires_delta=timedelta(hours=8),
+                                        fresh=True
+                                    )
 
-     # ✅ Log the login
+    # Optional: log login event
     try:
         db.log_action(
-            user_id=row[0],
+            user_id=row['email'],
             action="login",
             target_table="users",
-            target_id=row[0],
-            details=f"{row[3]} logged in successfully.",
+            target_id=row['id'],
+            details=f"{row['name']} {row['surname']} logged in to Mimir."
         )
     except Exception as e:
         print(f"⚠️ Logging error: {e}")
-    
-    return jsonify(access_token=access_token)
+
+    return jsonify({"access_token": access_token}), 200
 
 # Route for forgotten password
 @app.route('/api/forgot-password', methods=['POST'])
@@ -213,6 +247,7 @@ def logout():
     return response
 
 @app.route('/api/register', methods=['POST'])
+@role_required(['admin'])
 def register():
     data = request.get_json()
     # pprint(data)
@@ -233,13 +268,17 @@ def register():
 @app.route("/api/navbar")
 @jwt_required()
 def navbar():
-    current_user = get_jwt_identity()
-
-    # print('current_user: ', current_user)
-    return jsonify(logged_in_as=current_user)
+    current_user_id = get_jwt_identity()
+    claims = get_jwt()
+    return jsonify({
+        "user_id": current_user_id,
+        "email": claims.get("email"),
+        "role": claims.get("role")
+    })
 
 @app.route("/api/dashboard", methods=["GET"])
 @jwt_required()
+@role_required(['admin', 'sales', 'finance'])
 def circuits_grouped_by_vendor_and_type():
     # print("🚀 API HIT: /api/dashboard")
     try:
@@ -251,12 +290,14 @@ def circuits_grouped_by_vendor_and_type():
     
 @app.route('/api/dashboard/vendor/<vendor_name>', methods=['GET'])
 @jwt_required()
+@role_required(['admin', 'sales', 'finance'])
 def get_vendor_circuits(vendor_name):
     circuits = db.get_circuits_by_vendor(vendor_name)  # write this function
     return jsonify(circuits)
 
 @app.route('/api/circuits', methods=['GET', 'POST'])
 @jwt_required()
+@role_required(['admin', 'sales', 'technician'])
 def circuits():
     obj = request.get_json()
     # pprint(obj)
@@ -302,6 +343,7 @@ def circuits():
 
 @app.route('/api/sites', methods=['GET', 'POST'])
 @jwt_required()
+@role_required(['admin', 'sales', 'technician'])
 def sites():
     obj = request.get_json()
     # pprint(obj)
@@ -319,95 +361,120 @@ def sites():
         return jsonify(rows), 200
     return jsonify({"error": "No entries found"}), 404
         
-@app.route('/api/circuits/addcircuit', methods=['POST'])
+@app.route('/api/circuits/addcircuit', methods=['GET','POST'])
 @jwt_required()
+@role_required(['admin', 'sales', 'technician'])
 def addcircuit():
-    data = request.get_json()
-    # pprint(data)
+    if request.method == 'GET':
+        data = db.get_salesperson()
+        # pprint(data)
+        return jsonify(data)
 
-    # Sanitize and format decimal values
-    try:
-        mrc_raw = data.get('mrc', '')
-        selling_raw = data.get('sellingPrice', '')
+    if request.method == 'POST':
 
-        data['mrc'] = validate_decimal_field(mrc_raw, 'mrc')
-        data['sellingPrice'] = validate_decimal_field(selling_raw, 'sellingPrice')
+        data = request.get_json()
+        pprint(data)
 
-    except (ValueError, TypeError) as e:
-        return make_response({"error": f"Decimal validation error: {e}"}, 400)
+        # Handle nullable dates safely
+        start_date = data.get('startDate') or None
+        end_date = data.get('endDate') or None
+        
+        # Sanitize and format decimal values
+        try:
+            mrc_raw = data.get('mrc', '')
+            selling_raw = data.get('sellingPrice', '')
+            # commission_raw = data.get('commission', '')
 
-    # Set status
-    status = 'Active'
+            data['mrc'] = validate_decimal_field(mrc_raw, 'mrc')
+            data['sellingPrice'] = validate_decimal_field(selling_raw, 'sellingPrice')
+            # data['commission'] = validate_decimal_field(commission_raw, 'commission')
 
-    # Handle uploaded document name
-    doc_path = data.get('doc')
-    if doc_path:
-        # Expecting only filename, not full path
-        filename = secure_filename(doc_path)
-    else:
-        filename = 'None'
+        except (ValueError, TypeError) as e:
+            return make_response({"error": f"Decimal validation error: {e}"}, 400)
 
-    # ✅ Get site IDs from request data
-    siteA_id = request.json.get("siteA_id")
-    siteB_id = request.json.get("siteB_id")
+        # Set status
+        status = 'Active'
 
-    # Validate site IDs
-    if not siteA_id or not siteB_id:
-        return make_response({"error": "Both siteA_id and siteB_id are required"}, 400)
-    
-    # ✅ Ensure these are integers
-    siteA_id = int(siteA_id)
-    siteB_id = int(siteB_id)
-    
-    # Use try-except block for DB operation
-    try:
-        db.save_circuit(
-            data.get('vendor'),
-            data.get('circuitType'),
-            data.get('speed'),
-            data.get('circuitNumber'),
-            data.get('circuitOwner'),
-            data.get('usageFlag'),
-            data.get('enni'),
-            data.get('vlan'),
-            data.get('startDate'),
-            data.get('contractTerm'),
-            data.get('endDate'),
-            data['mrc'],
-            data['sellingPrice'],
-            siteA_id,
-            siteB_id,
-            data.get('comments'),
-            status,
-            filename
-        )
+        # Handle uploaded document name
+        doc_path = data.get('doc')
+        if doc_path:
+            # Expecting only filename, not full path
+            filename = secure_filename(doc_path)
+        else:
+            filename = 'None'
 
-        # ✅ Logging after successful insert
-        user_id = get_jwt_identity()
+        # ✅ Get site IDs from request data
+        siteA_id = request.json.get("siteA_id")
+        siteB_id = request.json.get("siteB_id")
 
-        # You can define your own fields list for logging
-        details = describe_changes_log({}, data, fields=[
-            'vendor', 'circuitType', 'speed', 'circuitNumber', 'circuitOwner', 'usageFlag',
-            'enni', 'vlan', 'startDate', 'contractTerm', 'endDate',
-            'mrc', 'sellingPrice', 'siteA_id', 'siteB_id', 'status', 'comments', 'doc'
-        ])
+        # Validate site IDs
+        if not siteA_id or not siteB_id:
+            return make_response({"error": "Both siteA_id and siteB_id are required"}, 400)
+        
+        # ✅ Ensure these are integers
+        siteA_id = int(siteA_id)
+        siteB_id = int(siteB_id)
 
-        # Log action
-        db.log_action(
-            user_id=user_id,
-            action="add",
-            target_table="circuits",
-            target_id=None,  # If you have a way to get the new circuit ID, insert it here
-            details=details
-        )
-        return make_response({"msg": "Circuit successfully added"}, 200)
-    
-    except Exception as e:
-        print(f"Database error: {e}")
-        return make_response({"error": "Unable to save circuit"}, 500)
+        
+        
+        # Use try-except block for DB operation
+        try:
+            circuit_id = db.save_circuit(
+                data.get('vendor'),
+                data.get('circuitType'),
+                data.get('speed'),
+                data.get('circuitNumber'),
+                data.get('circuitOwner'),
+                data.get('usageFlag'),
+                data.get('enni'),
+                data.get('vlan'),
+                start_date,
+                data.get('contractTerm'),
+                end_date,
+                data['mrc'],
+                data['sellingPrice'],
+                siteA_id,
+                siteB_id,
+                data.get('comments'),
+                status,
+                filename,
+                data.get('salesPerson')
+                # data['commission']
+            )
+
+            if not circuit_id:
+                return jsonify({"msg": "Failed to save circuit"}), 500
+        
+            # Update commissions table
+            db.upsert_commission(circuit_id)
+
+            # ✅ Logging after successful insert
+            user_id = get_jwt_identity()
+
+            # You can define your own fields list for logging
+            details = describe_changes_log({}, data, fields=[
+                'vendor', 'circuitType', 'speed', 'circuitNumber', 'circuitOwner', 'usageFlag',
+                'enni', 'vlan', 'startDate', 'contractTerm', 'endDate',
+                'mrc', 'sellingPrice', 'siteA_id', 'siteB_id', 'status', 'comments', 'doc', 'salesPerson'
+            ])
+
+            # Log action
+            db.log_action(
+                user_id=user_id,
+                action="add",
+                target_table="circuits",
+                target_id=None,  # If you have a way to get the new circuit ID, insert it here
+                details=details
+            )
+            return make_response({"msg": "Circuit successfully added"}, 200)
+        
+        except Exception as e:
+            print(f"Database error: {e}")
+            return make_response({"error": "Unable to save circuit: Database error: " + str(e)}, 500)
 
 @app.route('/api/upload', methods=['POST'])
 @jwt_required()
+@role_required(['admin', 'sales', 'technician'])
 def upload():
     # Ensure upload folder exists
     if not os.path.isdir(UPLOAD_FOLDER):
@@ -438,6 +505,7 @@ def upload():
     
 @app.route('/api/sites/addsite', methods=['GET', 'POST'])
 @jwt_required()
+@role_required(['admin', 'sales', 'technician'])
 def addsite():
     obj = request.get_json()
     # pprint(obj)
@@ -463,10 +531,13 @@ def addsite():
         )
         return jsonify({"msg": "Site successfully added"}), 200    
         
-@app.route('/api/circuits/viewcircuit/<id>', methods=['GET'])
+@app.route('/api/circuits/viewcircuit/<int:id>', methods=['GET'])
 @jwt_required()
+@role_required(['admin', 'sales', 'technician'])
 def view_circuit(id):
     data = db.search_circuit_to_view(id)
+
+    # print("DATA:")
     # pprint(data)
     if data:
         return jsonify(data)
@@ -474,6 +545,7 @@ def view_circuit(id):
 
 @app.route('/api/sites/viewsite/<site>', methods=['GET', 'DELETE'])
 @jwt_required()
+@role_required(['admin', 'sales', 'technician'])
 def view_site(site):
     if request.method == 'GET':
         data = db.search_site_to_view(site)
@@ -491,12 +563,29 @@ def view_site(site):
 
 @app.route('/api/circuits/updatecircuit/<id>', methods=['GET', 'PUT'])
 @jwt_required()
+@role_required(['admin', 'sales', 'technician'])
 def update_circuit(id):
+
+
     if request.method == 'GET':
-        data = db.search_circuit_to_view(id)
-        if data:
-            return jsonify(data)
-        return jsonify({'error': 'Circuit not found'}), 404
+        try:
+            # Fetch circuit details
+            circuit = db.search_circuit_to_view(id)
+
+            if not circuit:
+                return jsonify({'error': 'Circuit not found'}), 404
+
+            # Fetch additional data for dropdowns/selections
+            salespersons = db.get_salesperson()
+
+            # Return combined response
+            return jsonify({
+                'circuit': circuit,
+                'salespersons': salespersons
+            })
+
+        except Exception as e:
+            return jsonify({'error': str(e)}), 5004
 
     if request.method == 'PUT':
         data = request.get_json()
@@ -509,7 +598,6 @@ def update_circuit(id):
 
             data['mrc'] = validate_decimal_field(mrc_raw, 'mrc')
             data['sellingPrice'] = validate_decimal_field(selling_raw, 'sellingPrice')
-
         except (ValueError, TypeError) as e:
             return make_response({"error": f"Decimal validation error: {e}"}, 400)
 
@@ -536,14 +624,21 @@ def update_circuit(id):
 
             if success > 0:
                 # ✅ Get user performing the update
-                user_id = get_jwt_identity()
+                # user_id = get_jwt_identity()
+                claims = get_jwt()
+                # role = claims.get("role")
+                user_id = claims.get("email")
+
+                # ✅ Ensure commission row exists / updated with latest circuit fields
+                db.update_commission_on_circuit_change(id)
+
 
                 # ✅ Create log description
                 details = describe_changes_log(
                     old_data, data, fields=[
                         'vendor', 'circuitType', 'speed', 'circuitNumber', 'circuitOwner',
                         'enni', 'vlan', 'startDate', 'contractTerm', 'endDate',
-                        'mrc', 'sellingPrice', 'siteA_id', 'siteB_id', 'status', 'comments', 'doc'
+                        'mrc', 'sellingPrice', 'siteA_id', 'siteB_id', 'status', 'comments', 'doc', 'salesPerson'
                     ]
                 )
 
@@ -558,14 +653,15 @@ def update_circuit(id):
                 # return '', 204  # No Content response
                 return jsonify({'message': 'Circuit updated successfully'}), 200
             else:
-                return jsonify({'error': 'No changes made'}), 200
+                return jsonify({'error': 'No changes made'}), 204
             
         except Exception as e:
             print(f"Database error: {e}")
-            return make_response({"error": "Unable to update circuit"}, 500)
+            return make_response({"error": "Unable to update circuit: Database error: " + str(e)}, 500)
 
 @app.route('/api/download/<id>', methods=['GET'])
 @jwt_required()
+@role_required(['admin', 'sales', 'technician'])
 def download(id):
     row = db.search_circuit_to_view(id)
     # pprint(row)
@@ -590,7 +686,8 @@ def get_site():
     return jsonify(results)
 
 @app.route('/api/logs', methods=['GET'])
-# @jwt_required()
+@jwt_required()
+@role_required(['admin'])
 def view_logs():
     try:
         # print("VIEW_LOGS ROUTE HIT ✅")
@@ -599,6 +696,16 @@ def view_logs():
         return jsonify(rows)
     except Exception as e:
         print("ERROR:", str(e))
+        return jsonify({"error": str(e)}), 500
+    
+@app.route('/api/commissions', methods=['GET'])
+@jwt_required()
+@role_required(['admin', 'sales', 'technician'])
+def get_commissions():
+    try:
+        rows = db.get_all_commissions()
+        return jsonify(rows)
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 # Serve React frontend
