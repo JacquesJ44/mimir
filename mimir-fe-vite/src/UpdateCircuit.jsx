@@ -128,95 +128,76 @@ const UpdateCircuit = () => {
         // Form submission handler
         const handleSubmit = async (e) => {
             e.preventDefault();
-            
-            const fileInput = document.getElementById('formFile');
-            const selectedFile = fileInput?.files?.[0];
-            
-            // If file is selected, upload it
-            if (selectedFile) {
-                const formData = new FormData();
-                formData.append('doc', selectedFile);
 
-                try {
-                    await axios.post('/api/upload', formData, {
-                        headers: { 'Content-Type': 'multipart/form-data' },
-                        withCredentials: true
-                    });
-                    } catch (uploadErr) {
-                        console.error('Upload failed:', uploadErr);
-                        alert('File upload failed');
-                        return;
-                    }
-                }
-    
-            // Submit the rest of the form data
+            const fileInput = document.getElementById("formFile");
+            const selectedFile = fileInput?.files?.[0];
+
+            // Build circuit payload
             const circuitData = {
                 speed,
                 circuitType,
                 startDate,
                 contractTerm,
-                endDate: data.vendor === 'Wondernet' ? null : endDate,
+                endDate: data.vendor === "Wondernet" ? null : endDate,
                 enni,
                 vlan,
                 mrc,
-                sellingPrice: usageFlag === 'Client' ? sellingPrice : null,
+                sellingPrice: usageFlag === "Client" ? sellingPrice : null,
                 comments,
                 status,
-                doc: selectedFile?.name || doc || null, // optionally store filename
-                salesPerson: usageFlag === 'Client' ? salesPerson : null,
-                // commission: usageFlag === 'Client' ? commission : null
+                doc: selectedFile?.name || doc || null,
+                salesPerson: usageFlag === "Client" ? salesPerson : null,
             };
-            
-            // 🔎 1. Validate and send circuit data first
+
             try {
-                const res = await axios.put(`/api/circuits/updatecircuit/${id}`, circuitData, {
-                    headers: { 'Content-Type': 'application/json' },
-                    withCredentials: true
-                });
-
-                if (res.status === 200) {
-                    setShowSuccess(true);
-
-                    // ✅ 2. If circuit update was successful and file selected, upload it
-                    if (selectedFile) {
-                        const formData = new FormData();
-                        formData.append('doc', selectedFile);
-
-                        try {
-                            await axios.post('/api/upload', formData, {
-                                headers: { 'Content-Type': 'multipart/form-data' },
-                                withCredentials: true
-                            });
-                        } catch (uploadErr) {
-                            console.error('Upload failed:', uploadErr);
-                            alert('File upload failed (circuit was updated).');
-                        }
-                    }
-
-                    // ✅ 3. Navigate away after brief delay
-                    setTimeout(() => navigate('/circuits'), 1500);
-                } else if (res.status === 204) {
-                    // console.log('No changes made to the circuit.');
-                    alert('No changes made to the circuit.');
-                    navigate('/circuits');
+                // 1️⃣ Update circuit FIRST
+                const res = await axios.put(
+                `/api/circuits/updatecircuit/${id}`,
+                circuitData,
+                {
+                    headers: { "Content-Type": "application/json" },
+                    withCredentials: true,
                 }
-            );
+                );
 
-            if (res.status === 200) {
+                if (res.status === 204) {
+                alert("No changes made to the circuit.");
+                navigate("/circuits");
+                return;
+                }
+
+                if (res.status !== 200) {
+                throw new Error("Unexpected response from server");
+                }
+
+                // 2️⃣ Upload file ONLY if update succeeded and file exists
+                if (selectedFile) {
+                const formData = new FormData();
+                formData.append("doc", selectedFile);
+
+                try {
+                    await axios.post("/api/upload", formData, {
+                    headers: { "Content-Type": "multipart/form-data" },
+                    withCredentials: true,
+                    });
+                } catch (uploadErr) {
+                    console.error("Upload failed:", uploadErr);
+                    alert("Circuit updated, but file upload failed.");
+                }
+                }
+
+                // 3️⃣ Success feedback + redirect
                 setShowSuccess(true);
-                // ✅ 3. Navigate away after brief delay
-                setTimeout(() => navigate('/circuits'), 1500);
-            } else if (res.status === 204) {
-                console.log('No changes made to the circuit.');
-            }
-            } catch (err) {
-            console.error('Failed to update circuit:', err);
+                setTimeout(() => navigate("/circuits"), 1500);
 
-            // Show backend error message in alert
-            const errorMsg = err.response?.data?.error || 'Failed to update circuit.';
-            alert(errorMsg);
+            } catch (err) {
+                console.error("Failed to update circuit:", err);
+
+                const errorMsg =
+                err.response?.data?.error || "Failed to update circuit.";
+                alert(errorMsg);
             }
-        };
+            };
 
     
     // Working with dates to set the last day of the contract equal to first day plus the contract term

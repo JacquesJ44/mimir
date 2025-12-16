@@ -1,7 +1,7 @@
 import axios from "./AxiosInstance.js";
 import { useState, useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
-import ViewHandover from "./ViewHandover.js";
+import ViewHandover from "./ViewHandover.jsx";
 
 const ViewCircuit = () => {
   const { id } = useParams();

@@ -2,7 +2,7 @@ import axios from "./AxiosInstance.js";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { addMonths, subDays, parseISO, format, isValid, set } from 'date-fns';
-import SiteSelector from "./SiteSelector.js";
+import SiteSelector from "./SiteSelector.jsx";
 
 const AddCircuit = () => {
 

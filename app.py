@@ -34,7 +34,7 @@ db = DbUtil({
 })
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-REACT_BUILD_DIR = os.path.join(BASE_DIR, "mimir-fe", "build")
+REACT_BUILD_DIR = os.path.join(BASE_DIR, "mimir-fe-vite", "dist")
 UPLOAD_FOLDER = './docs'
 ALLOWED_EXTENSIONS = set(['pdf'])
 DECIMAL_PATTERN = re.compile(r'^\d+(\.\d{1,2})?$')
@@ -414,8 +414,6 @@ def addcircuit():
         # ✅ Ensure these are integers
         siteA_id = int(siteA_id)
         siteB_id = int(siteB_id)
-
-        
         
         # Use try-except block for DB operation
         try:
@@ -446,7 +444,7 @@ def addcircuit():
                 return jsonify({"msg": "Failed to save circuit"}), 500
         
             # Update commissions table
-            db.upsert_commission(circuit_id)
+            # db.upsert_commission(circuit_id)
 
             # ✅ Logging after successful insert
             user_id = get_jwt_identity()
@@ -630,7 +628,7 @@ def update_circuit(id):
                 user_id = claims.get("email")
 
                 # ✅ Ensure commission row exists / updated with latest circuit fields
-                db.update_commission_on_circuit_change(id)
+                # db.update_commission_on_circuit_change(id)
 
 
                 # ✅ Create log description
@@ -726,4 +724,4 @@ def serve(path):
 
 
 if __name__ == '__main__':
-    app.run(hots='0.0.0.0', port=5001)
+    app.run()
