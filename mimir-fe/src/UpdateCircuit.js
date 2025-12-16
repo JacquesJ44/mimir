@@ -1,7 +1,7 @@
 import axios from "./AxiosInstance.js";
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { addMonths, subDays, parseISO, format, set } from 'date-fns';
+import { addMonths, subDays, parseISO, format, isValid,set } from 'date-fns';
 
 const UpdateCircuit = () => {
 
@@ -25,7 +25,6 @@ const UpdateCircuit = () => {
             setSpeeds(data.speeds);
             setContractTerms(data.contractTerms);
             setEnnis(data.ennis);
-            setSalesPersons(data.salesPersons);
             })
             .catch((err) => console.error("Failed to load options:", err));
     }, []);
@@ -50,7 +49,7 @@ const UpdateCircuit = () => {
     const [comments, setComments] = useState('');
     const [status, setStatus] = useState('');
     const [salesPerson, setSalesPerson] = useState('');
-    const [commission, setCommission] = useState('');
+    // const [commission, setCommission] = useState('');
 
     const [valueA, setValueA] = useState('');
     const [valueB, setValueB] = useState('');
@@ -78,30 +77,49 @@ const UpdateCircuit = () => {
 
     useEffect(() => {
         window.scrollTo(0, 0);
+
         axios.get(`/api/circuits/updatecircuit/${id}`)
             .then(res => {
-                const circuit = res.data;
-                // console.log('Fetched circuit status:', circuit.status);
-                // console.log(circuit);
-                setData(circuit);
-                setSpeed(circuit.speed || '');
-                setCircuitType(circuit.circuitType || '');
-                setEnni(circuit.enni || '');
-                setVlan(circuit.vlan || '');
-                setStartDate(circuit.startDate ? new Date(circuit.startDate).toISOString().split('T')[0] : '');
-                setContractTerm(circuit.contractTerm || '');
-                setEndDate(circuit.endDate ? new Date(circuit.endDate).toISOString().split('T')[0] : '');
-                setMrc(circuit.mrc || '');
-                setUsageFlag(circuit.usageFlag || '');
-                setSellingPrice(circuit.sellingPrice || '');
-                setComments(circuit.comments || '');
-                setStatus(circuit.status || '');
-                setDoc(circuit.doc || '');
-                setSalesPerson(circuit.salesPerson || '');
-                setCommission(circuit.commission || '');
+            const { circuit, salespersons } = res.data;
+
+            if (!circuit) return;
+
+            // Set circuit data
+            setData(circuit);
+            setSpeed(circuit.speed || '');
+            setCircuitType(circuit.circuitType || '');
+            setEnni(circuit.enni || '');
+            setVlan(circuit.vlan || '');
+            setStartDate(circuit.startDate ? new Date(circuit.startDate).toISOString().split('T')[0] : '');
+            setContractTerm(circuit.contractTerm || '');
+            setMrc(circuit.mrc || '');
+            setUsageFlag(circuit.usageFlag || '');
+            setSellingPrice(circuit.sellingPrice || '');
+            setComments(circuit.comments || '');
+            setStatus(circuit.status || '');
+            setDoc(circuit.doc || '');
+            setSalesPerson(circuit.salesPerson || '');
+
+            // Calculate endDate if needed
+            if (
+                circuit.startDate &&
+                circuit.contractTerm &&
+                circuit.contractTerm !== 0
+            ) {
+                lastDay(circuit.contractTerm, circuit.startDate);
+            } else {
+                setEndDate(circuit.endDate || '');
+            }
+
+            // Set salespersons list for dropdown
+            setSalesPersons(salespersons || []);
             })
             .catch(err => {
-                console.error('Error fetching circuit data:', err);
+            if (err.response?.status === 404) {
+                console.warn("Circuit not found:", err.response.data?.error);
+            } else {
+                console.error("Error fetching circuit data:", err);
+            }
             });
         }, [id]);
         
@@ -129,7 +147,7 @@ const UpdateCircuit = () => {
                 status,
                 doc: selectedFile?.name || doc || null, // optionally store filename
                 salesPerson: usageFlag === 'Client' ? salesPerson : null,
-                commission: usageFlag === 'Client' ? commission : null
+                // commission: usageFlag === 'Client' ? commission : null
             };
             
             // 🔎 1. Validate and send circuit data first
@@ -161,7 +179,9 @@ const UpdateCircuit = () => {
                     // ✅ 3. Navigate away after brief delay
                     setTimeout(() => navigate('/circuits'), 1500);
                 } else if (res.status === 204) {
-                    console.log('No changes made to the circuit.');
+                    // console.log('No changes made to the circuit.');
+                    alert('No changes made to the circuit.');
+                    navigate('/circuits');
                 }
             } catch (err) {
                 console.error('Failed to update circuit:', err);
@@ -173,29 +193,29 @@ const UpdateCircuit = () => {
         };
     
     // Working with dates to set the last day of the contract equal to first day plus the contract term
-    const lastDay = (term) => {
-            setContractTerm(term);
-    
-            if (!startDate || !term) {
-                setEndDate("");
-                return;
-            }
-    
-            try {
-                const parsedStart = parseISO(startDate); // assumes startDate is "YYYY-MM-DD"
-                const monthsToAdd = parseInt(term, 10);
-    
-                // Add months to startDate, then subtract 1 day to get "last day of contract"
-                const rawEnd = addMonths(parsedStart, monthsToAdd);
-                const finalEnd = subDays(rawEnd, 1); // Optional: Subtract 1 to match business expectations
-    
-                // Format to "YYYY-MM-DD"
-                const formatted = format(finalEnd, "yyyy-MM-dd");
-                setEndDate(formatted);
-            } catch (e) {
-                console.error("Invalid date logic:", e);
-                setEndDate("");
-            }
+    const lastDay = (termValue, startDateValue) => {
+        if (!startDateValue || !termValue) {
+            setEndDate("");
+            setContractTerm(termValue);
+            return;
+        }
+
+        try {
+            const start = new Date(startDateValue);
+            if (isNaN(start)) return;
+
+            const months = parseInt(termValue, 10);
+            if (isNaN(months)) return;
+
+            const end = new Date(start);
+            end.setMonth(end.getMonth() + months);
+            setEndDate(end.toISOString().split("T")[0]);
+            setContractTerm(termValue);
+
+        } catch (err) {
+            console.error("Invalid date logic:", err);
+            setEndDate("");
+        }
         };
 
     return ( 
@@ -206,6 +226,7 @@ const UpdateCircuit = () => {
                     <h2 className="text-2xl font-semibold mb-6 text-center">Update Circuit</h2>
 
                     <form onSubmit={(e) => {handleSubmit(e)}}>
+                        
                         <h1><strong>Client: {data.siteB_name}</strong></h1>
                         <h6><strong>{data.vendor} | {data.circuitType} | {data.circuitNumber}</strong></h6>
 
@@ -288,53 +309,66 @@ const UpdateCircuit = () => {
 
                         {/* Row 2 */}
                         { data.vendor !== 'Wondernet' && (
+                            
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {/* Start Date */}
-                            <div className="form-control">
+                            {/* Start Date (Row 3, Col 1) */}
+                            <div className="form-control col-span-1">
                                 <label className="label">
-                                <span className="label-text">Start Date</span>    
+                                    <span className="label-text">Start Date</span>
                                 </label>
                                 <input
-                                className="input input-bordered w-full"
-                                type="date"
-                                required
-                                value={startDate}
-                                onChange={(e) => setStartDate(e.target.value)}
+                                    type="date"
+                                    className="input input-bordered w-full"
+                                    required
+                                    value={startDate}
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+                                        setStartDate(value);
+
+                                        if (contractTerm && value) {
+                                            lastDay(contractTerm, value);
+                                        } else {
+                                            setEndDate("");
+                                        }
+                                    }}
                                 />
                             </div>
 
-                            {/* Contract Term Dropdown */}
-                            <div className="form-control">
-                                <label htmlFor="contractterm" className="label">
-                                <span className="label-text">Contract Term</span>
+                            {/* Contract Term (Row 3, Col 2) */}
+                            <div className="form-control col-span-1">
+                                <label className="label">
+                                    <span className="label-text">Contract Term</span>
                                 </label>
                                 <select
-                                value={contractTerm}
-                                onChange={(e) => lastDay(e.target.value)}
-                                id="contractterm"
-                                className="input input-bordered w-full"
-                                required
-                                >
-                                <option value="" disabled>Choose an option...</option>
-                                {contractTerms.map((term, index) => (
+                                    value={contractTerm}
+                                    onChange={(e) => lastDay(e.target.value, startDate)}
+                                    className="input input-bordered w-full"
+                                    required
+                                    >
+                                    <option value="">Choose an option...</option>
+                                    {contractTerms.map((term, index) => (
                                     <option key={index} value={term.value}>{term.label}</option>
-                                ))}
+                                    ))}
                                 </select>
                             </div>
 
-                            {/* Last Day of Contract (Calculated) */}
-                            <div className="form-control">
-                                <label className="label">
-                                <span className="label-text">Last Day of Contract</span>    
-                                </label>
-                                <input
-                                className="input input-bordered w-full"
-                                type="date"
-                                required
-                                readOnly
-                                value={endDate}
-                                />
-                            </div>
+                            {/* End Date (Row 3, Col 3) */}
+                            { contractTerm !== 0 && (
+                                <>
+                                    <div className="form-control col-span-1">
+                                    <label className="label">
+                                        <span className="label-text">Last Day of Contract</span>
+                                    </label>
+                                    <input
+                                        className="input input-bordered w-full"
+                                        type="date"
+                                        readOnly
+                                        required
+                                        value={endDate}
+                                    />
+                                    </div>
+                                </>
+                            )}
                         </div>
                         )}
 
@@ -379,15 +413,15 @@ const UpdateCircuit = () => {
                                         </label>
                                         <select value = { salesPerson } onChange={(e) => setSalesPerson(e.target.value)} id="salesPerson" className="input input-bordered w-full">
                                         <option value=''>Choose an option...</option>
-                                                {salesPersons.map((s, index) => {
+                                                {salesPersons.map((s) => {
                                                     return (
-                                                        <option key={index} value={s.value}>{s.label}</option>
+                                                        <option key={s.id} value={s.id}>{s.name} {s.surname}</option>
                                                     )
                                                 })}
                                         </select>
                                     </div>
 
-                                    <div className="form-control col-span-1">
+                                    {/* <div className="form-control col-span-1">
                                         <label className="label">
                                             <span className="label-text">Commission (%)</span>
                                         </label>
@@ -399,7 +433,7 @@ const UpdateCircuit = () => {
                                             value={commission}
                                             onChange={(e) => setCommission(e.target.value)}
                                         />
-                                    </div>
+                                    </div> */}
                             </>
                             )}
 

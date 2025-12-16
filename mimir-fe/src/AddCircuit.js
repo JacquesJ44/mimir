@@ -1,7 +1,7 @@
 import axios from "./AxiosInstance.js"; 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { addMonths, subDays, parseISO, format, set } from 'date-fns';
+import { addMonths, subDays, parseISO, format, isValid, set } from 'date-fns';
 import SiteSelector from "./SiteSelector.js";
 
 const AddCircuit = () => {
@@ -22,9 +22,15 @@ const AddCircuit = () => {
             setSpeeds(data.speeds);
             setContractTerms(data.contractTerms);
             setEnnis(data.ennis);
-            setSalesPersons(data.salesPersons);
             })
             .catch((err) => console.error("Failed to load options:", err));
+
+        axios.get("/api/circuits/addcircuit")
+                .then((res) => {
+                setSalesPersons(res.data)
+                // console.log("Sales People:", res.data);
+            })
+            .catch((err) => console.error(err));
     }, []);
 
         const changeVendor = (e) => {
@@ -62,7 +68,7 @@ const AddCircuit = () => {
     const [comments, setComments] = useState('');
     const [doc, setDoc] = useState('');
     const [salesPerson, setSalesPerson] = useState('');
-    const [commission, setCommission] = useState('');
+    // const [commission, setCommission] = useState('');
 
     const [siteAId, setSiteAId] = useState(null);
     const [siteBId, setSiteBId] = useState(null);
@@ -128,7 +134,7 @@ const AddCircuit = () => {
             comments,
             doc: selectedFile?.name || null,
             salesPerson: usageFlag === 'Client' ? salesPerson : null,
-            commission: usageFlag === 'Client' ? commission : null,
+            // commission: usageFlag === 'Client' ? commission : null,
         };
 
         try {
@@ -165,7 +171,7 @@ const AddCircuit = () => {
                 formData.append('doc', selectedFile);
                 if (usageFlag === 'Client') {
                     formData.append('salesPerson', salesPerson);
-                    formData.append('commission', commission);
+                    // formData.append('commission', commission);
                 }
 
                 try {
@@ -195,30 +201,31 @@ const AddCircuit = () => {
     };
 
     // Working with dates to set the last day of the contract equal to first day plus the contract term
-    const lastDay = (term) => {
-        setContractTerm(term);
-
-        if (!startDate || !term) {
+    const lastDay = (termValue, startDateValue) => {
+        if (!startDateValue || !termValue) {
             setEndDate("");
+            setContractTerm(termValue);
             return;
         }
 
         try {
-            const parsedStart = parseISO(startDate); // assumes startDate is "YYYY-MM-DD"
-            const monthsToAdd = parseInt(term, 10);
+            const start = new Date(startDateValue);
+            if (isNaN(start)) return;
 
-            // Add months to startDate, then subtract 1 day to get "last day of contract"
-            const rawEnd = addMonths(parsedStart, monthsToAdd);
-            const finalEnd = subDays(rawEnd, 1); // Optional: Subtract 1 to match business expectations
+            const months = parseInt(termValue, 10);
+            if (isNaN(months)) return;
 
-            // Format to "YYYY-MM-DD"
-            const formatted = format(finalEnd, "yyyy-MM-dd");
-            setEndDate(formatted);
-        } catch (e) {
-            console.error("Invalid date logic:", e);
+            const end = new Date(start);
+            end.setMonth(end.getMonth() + months);
+            setEndDate(end.toISOString().split("T")[0]);
+            setContractTerm(termValue);
+
+        } catch (err) {
+            console.error("Invalid date logic:", err);
             setEndDate("");
         }
-    };
+        };
+
 
     return ( 
         
@@ -392,9 +399,18 @@ const AddCircuit = () => {
                                     className="input input-bordered w-full"
                                     required
                                     value={startDate}
-                                    onChange={(e) => setStartDate(e.target.value)}
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+                                        setStartDate(value);
+
+                                        if (contractTerm && value) {
+                                            lastDay(contractTerm, value);
+                                        } else {
+                                            setEndDate("");
+                                        }
+                                    }}
                                 />
-                                </div>
+                            </div>
 
                                 {/* Contract Term (Row 3, Col 2) */}
                                 <div className="form-control col-span-1">
@@ -403,7 +419,7 @@ const AddCircuit = () => {
                                 </label>
                                 <select
                                     value={contractTerm}
-                                    onChange={(e) => lastDay(e.target.value)}
+                                    onChange={(e) => lastDay(e.target.value, startDate)}
                                     className="input input-bordered w-full"
                                     required
                                     >
@@ -550,15 +566,15 @@ const AddCircuit = () => {
                                         </label>
                                         <select value = { salesPerson } onChange={(e) => setSalesPerson(e.target.value)} id="salesPerson" className="input input-bordered w-full">
                                         <option value=''>Choose an option...</option>
-                                                {salesPersons.map((s, index) => {
+                                                {salesPersons.map((s) => {
                                                     return (
-                                                        <option key={index} value={s.value}>{s.label}</option>
+                                                        <option key={s.id} value={s.id}>{s.name} {s.surname}</option>
                                                     )
                                                 })}
                                         </select>
                                     </div>
 
-                                    <div className="form-control col-span-1">
+                                    {/* <div className="form-control col-span-1">
                                         <label className="label">
                                             <span className="label-text">Commission (%)</span>
                                         </label>
@@ -570,7 +586,7 @@ const AddCircuit = () => {
                                             value={commission}
                                             onChange={(e) => setCommission(e.target.value)}
                                         />
-                                    </div>
+                                    </div> */}
                                 </>
                                 )}
 

@@ -19,6 +19,14 @@
     {
       "vendor": "Wondernet",
       "type": ["Octotel 50/50Mbps FTTB", "Octotel 55/25Mbps FTTH", "Octotel 75/75Mbps FTTH", "Octotel 150/150Mbps FTTH", "Openserve 50/50Mbps FTTH", "Openserve 100/50Mbps FTTH", "Openserve 100/100Mbps FTTH", "Openserve 500/250Mbps FTTH", "Vumatel 50/50Mbps FTTH", "Vumatel 100/100Mbps FTTH", "Vumatel 200/200Mbps FTTH", "Vumatel 500/200Mbps FTTH", "Other"]
+    },
+    {
+      "vendor": "Faircom",
+      "type": ["Other"]
+    },
+    {
+      "vendor": "Evolve Internet",
+      "type": ["Other"]
     }
   ],
 
@@ -58,7 +66,7 @@
   ],
 
   "contractTerms": [
-    { "label": "Month to Month", "value": "Month-to-Month" },
+    { "label": "Month to Month", "value": 0 },
     { "label": "12 Months", "value": 12 },
     { "label": "24 Months", "value": 24 },
     { "label": "36 Months", "value": 36 },
@@ -73,16 +81,5 @@
       { "label": "ENI11-0001122", "value": "ENI11-0001122" },
       { "label": "ENI11-0006137", "value": "ENI11-0006137" },
       { "label": "ENI21-0006085", "value": "ENI21-0006085" }
-  ],
-
-  "salesPersons": [
-    { "label": "Andrew Owen-Jones", "value": "Andrew Owen-Jones" },
-    { "label": "Conrad Minnaar", "value": "Conrad Minnaar" },
-    { "label": "Tristan Nicholson", "value": "Tristan Nicholson" },
-    { "label": "Remeredzai Chazi", "value": "Remeredzai Chazi" },
-    { "label": "Jacques du Toit", "value": "Jacques du Toit" },
-    { "label": "Allen Chazi", "value": "Allen Chazi" },
-    { "label": "Andrew Verwey", "value": "Andrew Verwey" },
-    { "label": "Mark van Rooyen", "value": "Mark van Rooyen" }
   ]
 }
