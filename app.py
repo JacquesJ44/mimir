@@ -29,15 +29,24 @@ load_dotenv()
 db = DbUtil({
     'host': os.getenv('DB_HOST'),
     'user': os.getenv('DB_USER'),
-    # 'password': os.getenv('DB_PASSWORD'),
+    'password': os.getenv('DB_PASSWORD'),
     'db': os.getenv('DB_NAME')
 })
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+REACT_BUILD_DIR = os.path.join(BASE_DIR, "mimir-fe", "build")
 UPLOAD_FOLDER = './docs'
 ALLOWED_EXTENSIONS = set(['pdf'])
 DECIMAL_PATTERN = re.compile(r'^\d+(\.\d{1,2})?$')
 
-app = Flask(__name__, static_url_path="/mimir/static") # Path to your React build folder
+app = Flask(
+    __name__,
+    static_folder=REACT_BUILD_DIR,
+    static_url_path=""
+)
+
+# Apply CORS immediately after app creation
+CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": "*"}}, allow_headers=["Content-Type", "Authorization"])
 
 # Secret Keys
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
@@ -205,7 +214,7 @@ def forgot_password():
     if user:
         token = serializer.dumps(email, salt='password-reset')
         # reset_url = url_for('reset_password', token=token, _external=True)
-        reset_url = f"http://localhost:3000/reset-password/{token}"
+        reset_url = f"http://mimir.aesir.co.za/reset-password/{token}"
 
         # Launch email sending in a background thread
         Thread(target=send_reset_email, args=(app, email, reset_url)).start()
@@ -551,7 +560,8 @@ def view_site(site):
             return jsonify({"msg": "Deleted!"})
         return jsonify({"error": "No site found"}), 404
 
-@app.route('/api/circuits/updatecircuit/<int:id>', methods=['GET', 'PUT'])
+
+@app.route('/api/circuits/updatecircuit/<id>', methods=['GET', 'PUT'])
 @jwt_required()
 @role_required(['admin', 'sales', 'technician'])
 def update_circuit(id):
@@ -698,23 +708,22 @@ def get_commissions():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# This route will serve the React app - this helps for routing in the Production environment
+# Serve React frontend
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def serve(path):
-    # Exclude API routes from being caught here
-    if path.startswith("api") or path.startswith("static") or path.endswith(('.js', '.css', '.json', '.ico', '.png')):
-        return send_from_directory(app.static_folder, path)
+    # If the path starts with 'api', let Flask handle it
+    if path.startswith("api"):
+        return "Not Found", 404  # This forces Flask to look for actual API routes
+    
+    # Serve actual static files if they exist
+    full_path = os.path.join(REACT_BUILD_DIR, path)
+    if path and os.path.exists(full_path):
+        return send_from_directory(REACT_BUILD_DIR, path)
 
-    # Serve actual files if they exist
-    full_path = os.path.join(app.static_folder, path)
-    if os.path.exists(full_path):
-        return send_from_directory(app.static_folder, path)
-
-    # Serve React index.html for everything else
-    return send_from_directory(app.static_folder, "index.html")
+    # Fallback to React index.html
+    return send_from_directory(REACT_BUILD_DIR, "index.html")
 
 
 if __name__ == '__main__':
-    CORS(app, supports_credentials=True, resource={r"/*": {"origins": "*"}})
-    app.run(debug=True)
+    app.run(hots='0.0.0.0', port=5001)

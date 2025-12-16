@@ -132,7 +132,24 @@ const UpdateCircuit = () => {
             const fileInput = document.getElementById('formFile');
             const selectedFile = fileInput?.files?.[0];
             
-            // Contruct circuit data
+            // If file is selected, upload it
+            if (selectedFile) {
+                const formData = new FormData();
+                formData.append('doc', selectedFile);
+
+                try {
+                    await axios.post('/api/upload', formData, {
+                        headers: { 'Content-Type': 'multipart/form-data' },
+                        withCredentials: true
+                    });
+                    } catch (uploadErr) {
+                        console.error('Upload failed:', uploadErr);
+                        alert('File upload failed');
+                        return;
+                    }
+                }
+    
+            // Submit the rest of the form data
             const circuitData = {
                 speed,
                 circuitType,
@@ -183,14 +200,24 @@ const UpdateCircuit = () => {
                     alert('No changes made to the circuit.');
                     navigate('/circuits');
                 }
-            } catch (err) {
-                console.error('Failed to update circuit:', err);
+            );
 
-                // Show backend error message in alert
-                const errorMsg = err.response?.data?.error || 'Failed to update circuit.';
-                alert(errorMsg);
+            if (res.status === 200) {
+                setShowSuccess(true);
+                // ✅ 3. Navigate away after brief delay
+                setTimeout(() => navigate('/circuits'), 1500);
+            } else if (res.status === 204) {
+                console.log('No changes made to the circuit.');
+            }
+            } catch (err) {
+            console.error('Failed to update circuit:', err);
+
+            // Show backend error message in alert
+            const errorMsg = err.response?.data?.error || 'Failed to update circuit.';
+            alert(errorMsg);
             }
         };
+
     
     // Working with dates to set the last day of the contract equal to first day plus the contract term
     const lastDay = (termValue, startDateValue) => {

@@ -199,7 +199,7 @@ const AddCircuit = () => {
             }
         }
     };
-
+    
     // Working with dates to set the last day of the contract equal to first day plus the contract term
     const lastDay = (termValue, startDateValue) => {
         if (!startDateValue || !termValue) {
