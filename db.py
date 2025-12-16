@@ -378,20 +378,9 @@ class DbUtil:
         try:
             with con.cursor() as c:
                 query = """
-                    SELECT 
-                        l.id,
-                        l.user_id,
-                        u.name AS user_name,
-                        u.surname AS user_surname,
-                        l.action,
-                        l.target_table,
-                        l.target_id,
-                        l.ip_address,
-                        l.timestamp,
-                        l.details
-                    FROM user_logs l
-                    JOIN users u ON l.user_id = u.id
-                    ORDER BY l.timestamp DESC
+                    SELECT id, user_id, action, target_table, target_id, ip_address, timestamp, details
+                    FROM user_logs
+                    ORDER BY timestamp DESC
                     LIMIT 100
                 """
                 c.execute(query)

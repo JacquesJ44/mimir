@@ -27,7 +27,7 @@ const handleSubmit = async e => {
 
   return (
     <div className="h-screen flex items-center justify-center">
-      <div className="card flex-shrink-0 w-full max-w-sm shadow-2xl bg-base-200">
+      <div className="card flex-none w-full max-w-sm shadow-2xl bg-base-200">
         <div className="card-body">
           <h2 className="text-xl font-bold mb-4">Login</h2>
 

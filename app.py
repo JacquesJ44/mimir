@@ -1,6 +1,6 @@
 from flask import Flask
 from flask import jsonify, request, make_response, send_file, send_from_directory
-from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, unset_jwt_cookies, jwt_required, JWTManager, verify_jwt_in_request
+from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, unset_jwt_cookies, jwt_required, JWTManager, verify_jwt_in_request, set_access_cookies
 from flask_cors import CORS
 from flask_mail import Mail, Message
 from dotenv import load_dotenv
@@ -446,8 +446,10 @@ def addcircuit():
             # Update commissions table
             # db.upsert_commission(circuit_id)
 
-            # ✅ Logging after successful insert
-            user_id = get_jwt_identity()
+            # ✅ Get user performing the update for logging
+            claims = get_jwt()
+            # role = claims.get("role")
+            user_id = claims.get("email")
 
             # You can define your own fields list for logging
             details = describe_changes_log({}, data, fields=[
@@ -563,8 +565,6 @@ def view_site(site):
 @jwt_required()
 @role_required(['admin', 'sales', 'technician'])
 def update_circuit(id):
-
-
     if request.method == 'GET':
         try:
             # Fetch circuit details
@@ -622,7 +622,6 @@ def update_circuit(id):
 
             if success > 0:
                 # ✅ Get user performing the update
-                # user_id = get_jwt_identity()
                 claims = get_jwt()
                 # role = claims.get("role")
                 user_id = claims.get("email")
@@ -671,7 +670,11 @@ def download(id):
     target = os.path.join(UPLOAD_FOLDER, file)
 
     if os.path.exists(target):
-        return send_file(target, as_attachment=True, mimetype='application/pdf')
+        print("Serving file:", target)
+        print("File size:", os.path.getsize(target))
+        response = make_response(send_file(target, mimetype='application/pdf', as_attachment=False))
+        response.headers['Content-Disposition'] = f'inline; filename="{file}"'
+        return response
     else:
         return jsonify({"error": "File not found"}), 404
     
