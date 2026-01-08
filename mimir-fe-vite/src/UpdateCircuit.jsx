@@ -16,11 +16,17 @@ const UpdateCircuit = () => {
         fetch("/circuit-options.json")
             .then((res) => res.json())
             .then((data) => {
-            const wondernet = data.vendors.find(v => v.vendor === "Wondernet");
-                if (wondernet) {
-                    setCircuitTypes(
-                        wondernet.type.map(t => ({ value: t, label: t }))
-                    );
+            // Vendors you want to support
+            const specialVendors = ["Wondernet", "Faircom", "Evolve Internet"];
+
+            // Find the first matching vendor in the list
+            const vendorMatch = data.vendors.find(v => specialVendors.includes(v.vendor));
+
+            if (vendorMatch) {
+                setCircuitTypes(
+                    vendorMatch.type.map(t => ({ value: t, label: t }))
+                );
+
                 }
             setSpeeds(data.speeds);
             setContractTerms(data.contractTerms);
@@ -138,7 +144,7 @@ const UpdateCircuit = () => {
                 circuitType,
                 startDate,
                 contractTerm,
-                endDate: data.vendor === "Wondernet" ? null : endDate,
+                endDate: ['Wondernet', 'Faircom', 'Evolve Internet'].includes(data.vendor) ? null : endDate,
                 enni,
                 vlan,
                 mrc,
@@ -146,7 +152,8 @@ const UpdateCircuit = () => {
                 comments,
                 status,
                 doc: selectedFile?.name || doc || null,
-                salesPerson: usageFlag === "Client" ? salesPerson : null,
+                salesPerson: usageFlag === 'Client' && salesPerson ? salesPerson : null,
+
             };
 
             try {
@@ -254,7 +261,7 @@ const UpdateCircuit = () => {
                                 </select>
                             </div>
 
-                            { data.vendor === 'Wondernet' ? (
+                            { ['Wondernet', 'Faircom', 'Evolve Internet'].includes(data.vendor) ? (
                                 <div className="form-control">
                                     <label htmlFor="circuitType" className="label">
                                         <span className="label-text">Circuit Type</span>
@@ -316,8 +323,7 @@ const UpdateCircuit = () => {
                         </div>
 
                         {/* Row 2 */}
-                        { data.vendor !== 'Wondernet' && (
-                            
+                        { !['Wondernet', 'Faircom', 'Evolve Internet'].includes(data.vendor) && (                            
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {/* Start Date (Row 3, Col 1) */}
                             <div className="form-control col-span-1">
