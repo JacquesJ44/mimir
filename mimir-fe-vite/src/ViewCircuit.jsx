@@ -55,7 +55,7 @@ const ViewCircuit = () => {
                       <p><strong>ENNI:</strong> {data.enni}</p>
                       <p><strong>VLAN ID:</strong> {data.vlan}</p>
                       <p><strong>Contract Start:</strong> {data.startDate ? new Date(data.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}</p>
-                      <p><strong>Contract Term:</strong> {data.contractTerm === "Month-to-Month" ? 'Month-to-Month' : `${data.contractTerm} months`}</p>
+                      <p><strong>Contract Term:</strong> {data.contractTerm ==='0' ? 'Month-to-Month' : `${data.contractTerm} months`}</p>
                       <p><strong>Contract End:</strong> {data.endDate ? new Date(data.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}</p>
                       <p><strong>Site A:</strong> {data.siteA_name}</p>
                       <p><strong>Site B:</strong> {data.siteB_name}</p>

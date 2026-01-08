@@ -430,7 +430,7 @@ const AddCircuit = () => {
                                 </div>
 
                                 {/* End Date (Row 3, Col 3) */}
-                                { contractTerm !== "Month-to-Month" && (
+                                { contractTerm !== 0 && (
 
                                 <div className="form-control col-span-1">
                                 <label className="label">
