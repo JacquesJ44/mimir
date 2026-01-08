@@ -40,6 +40,8 @@ class DbUtil:
                     'SELECT * FROM users WHERE email = %s', (email,)
                 )
                 row = c.fetchone()
+                if row is None:
+                    return None
                 col_names = [c[0] for c in c.description]
                 return dict(zip(col_names, row))
         finally:

@@ -126,7 +126,7 @@ const AddCircuit = () => {
             vlan: vendor === 'DFA' || vendor === 'Ikeja' ? vlan : null,
             startDate,
             contractTerm,
-            endDate: vendor === 'Wondernet' ? null : endDate,
+            endDate: ['Wondernet', 'Faircom', 'Evolve'].includes(vendor) ? null : endDate,
             mrc,
             sellingPrice: usageFlag === 'Client' ? sellingPrice : null,
             siteA_id: siteAId,
@@ -267,7 +267,7 @@ const AddCircuit = () => {
                                 
 
                                 {/*  Display only if Vendor is set to 'Wondernet */}
-                                { vendor !== 'Wondernet' &&  (
+                                { !( ['Wondernet', 'Faircom', 'Evolve'].includes(vendor) ) && (
                                 // <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                                     <>
                                         <div className="form-control">
