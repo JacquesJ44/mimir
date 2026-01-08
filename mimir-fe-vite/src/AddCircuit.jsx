@@ -126,14 +126,14 @@ const AddCircuit = () => {
             vlan: vendor === 'DFA' || vendor === 'Ikeja' ? vlan : null,
             startDate,
             contractTerm,
-            endDate: ['Wondernet', 'Faircom', 'Evolve'].includes(vendor) ? null : endDate,
+            endDate: ['Wondernet', 'Faircom', 'Evolve Internet'].includes(vendor) ? null : endDate,
             mrc,
             sellingPrice: usageFlag === 'Client' ? sellingPrice : null,
             siteA_id: siteAId,
             siteB_id: siteBId,
             comments,
             doc: selectedFile?.name || null,
-            salesPerson: usageFlag === 'Client' ? salesPerson : null,
+            salesPerson: usageFlag === 'Client' && salesPerson ? salesPerson : null,
             // commission: usageFlag === 'Client' ? commission : null,
         };
 
@@ -233,7 +233,6 @@ const AddCircuit = () => {
             <div className="max-w-5xl mx-auto">
                 <div className="card bg-white dark:bg-gray-800 shadow-xl p-8">
                     <h2 className="text-2xl font-semibold mb-6 text-center">Add New Circuit</h2>
-
                         <form onSubmit={handleSubmit} className="space-y-4">
                             {/* Row 1 */}
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -267,7 +266,7 @@ const AddCircuit = () => {
                                 
 
                                 {/*  Display only if Vendor is set to 'Wondernet */}
-                                { !( ['Wondernet', 'Faircom', 'Evolve'].includes(vendor) ) && (
+                                { !( ['Wondernet', 'Faircom', 'Evolve Internet'].includes(vendor) ) && (
                                 // <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                                     <>
                                         <div className="form-control">
