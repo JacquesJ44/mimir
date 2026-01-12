@@ -71,9 +71,11 @@ function App() {
             <Route path='/register' element={<PrivateRoute>
                                       <Register />
                                     </PrivateRoute>} />
+
             <Route path='/logs' element={<PrivateRoute>
                                       <LogsPage />
                                     </PrivateRoute>} />
+                                    
             <Route path='/commission' element={<PrivateRoute>
                                       <Commission />
                                     </PrivateRoute>} />

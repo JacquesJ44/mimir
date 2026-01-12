@@ -670,8 +670,8 @@ def download(id):
     target = os.path.join(UPLOAD_FOLDER, file)
 
     if os.path.exists(target):
-        print("Serving file:", target)
-        print("File size:", os.path.getsize(target))
+        # print("Serving file:", target)
+        # print("File size:", os.path.getsize(target))
         response = make_response(send_file(target, mimetype='application/pdf', as_attachment=False))
         response.headers['Content-Disposition'] = f'inline; filename="{file}"'
         return response
