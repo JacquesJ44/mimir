@@ -359,6 +359,7 @@ const exportToPDF = () => {
         <h2 className="text-2xl font-bold mb-6">Circuits per Vendor and Type</h2>
 
         <div className="w-full h-[400px]">
+          {data.length > 0 && (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 50 }}> 
               <XAxis dataKey="vendor" tick={<CustomTick />} />
@@ -375,6 +376,7 @@ const exportToPDF = () => {
               ))}
             </BarChart>
           </ResponsiveContainer>
+          )}
         </div>
       </div>
 

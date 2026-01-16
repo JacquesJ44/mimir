@@ -1,6 +1,7 @@
 import pymysql
 from datetime import datetime
 from flask import request
+from decimal import Decimal
 
 class DbUtil:
     def __init__(self, config):
@@ -170,19 +171,55 @@ class DbUtil:
     
     # DB OPS WITH CIRCUITS
     # Save a new circuit
-    def save_circuit(self, vendor, circuitType, speed, circuitNumber, circuitOwner, usageFlag, enni, vlan, startDate, contractTerm, endDate, mrc, sellingPrice, siteA, siteB, comments, status, doc, salesPerson):
-        con = self.get_connection()
-
+    def save_circuit(
+    self,
+    vendor,
+    circuit_type,
+    speed,
+    circuit_number,
+    circuit_owner,
+    usage_flag,
+    enni,
+    vlan,
+    start_date,
+    contract_term,
+    end_date,
+    mrc,
+    selling_price,
+    siteA_id,
+    siteB_id,
+    comments,
+    status,
+    doc,
+    salesperson_id
+):
+        conn = self.get_connection()
         try:
-            with con.cursor() as c:
-                c.execute(
-                   'INSERT INTO circuits (vendor, circuitType, speed, circuitNumber, circuitOwner, usageFlag,enni, vlan, startDate, contractTerm, endDate, mrc, sellingPrice, siteA, siteB, comments, status, doc, salesPerson) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)', 
-                    (vendor, circuitType, speed, circuitNumber, circuitOwner, usageFlag, enni, vlan, startDate, contractTerm, endDate, mrc, sellingPrice, siteA, siteB, comments, status, doc, salesPerson)
-                )
-                con.commit()
+            with conn.cursor() as c:
+                c.execute("""
+                    INSERT INTO circuits (
+                        vendor, circuitType, speed, circuitNumber, circuitOwner,
+                        usageFlag, enni, vlan, startDate, contractTerm,
+                        endDate, mrc, sellingPrice,
+                        siteA, siteB, comments, status, doc, salesPerson
+                    )
+                    VALUES (
+                        %s,%s,%s,%s,%s,
+                        %s,%s,%s,%s,%s,
+                        %s,%s,%s,
+                        %s,%s,%s,%s,%s,%s
+                    )
+                """, (
+                    vendor, circuit_type, speed, circuit_number, circuit_owner,
+                    usage_flag, enni, vlan, start_date, contract_term,
+                    end_date, mrc, selling_price,
+                    siteA_id, siteB_id, comments, status, doc, salesperson_id
+                ))
+                conn.commit()
                 return c.lastrowid
         finally:
-            con.close()
+            conn.close()
+
 
     # Search the db for similar circuit as searched for on the Circuits page
     def search_similar_circuit(self, query, dict_values):
@@ -392,118 +429,23 @@ class DbUtil:
         finally:
             con.close()
 
-    def upsert_commission(self, circuit_id):
-        """
-        Insert or update the commission record for a given circuit.
-        Initially, commission_percentage and commission_value are NULL.
-        """
-        try:
-            conn = self.get_connection()
-            with conn.cursor() as c:
-                # 1️⃣ Get circuit details
-                c.execute("""
-                    SELECT id, mrc, sellingPrice, contractTerm, startDate, salesPerson
-                    FROM circuits
-                    WHERE id=%s
-                """, (circuit_id,))
-                row = c.fetchone()
-                col_names = [desc[0] for desc in c.description]
-                circuit = dict(zip(col_names, row))
-
-
-                if not circuit:
-                    print(f"No circuit found with id {circuit_id}")
-                    return False
-
-                # 2️⃣ Check if commission exists
-                c.execute("SELECT id FROM commissions WHERE circuit_id=%s", (circuit_id,))
-                existing = c.fetchone()
-
-                if existing:
-                    # Update circuit info only, leave percentage/value as is
-                    c.execute("""
-                        UPDATE commissions
-                        SET salesperson_id=%s,
-                            mrc=%s,
-                            selling_price=%s,
-                            contract_months=%s,
-                            activation_date=%s,
-                            status='pending',
-                            updated_at=NOW()
-                        WHERE circuit_id=%s
-                    """, (
-                        circuit['salesPerson'],
-                        circuit['mrc'],
-                        circuit['sellingPrice'],
-                        circuit['contractTerm'],
-                        circuit['startDate'],
-                        circuit_id
-                    ))
-                else:
-                    # Insert commission record with null percentage/value
-                    c.execute("""
-                        INSERT INTO commissions (
-                            circuit_id, salesperson_id,
-                            mrc, selling_price,
-                            contract_months, activation_date, status
-                        ) VALUES (%s, %s, %s, %s, %s, %s, 'pending')
-                    """, (
-                        circuit['id'],
-                        circuit['salesPerson'],
-                        circuit['mrc'],
-                        circuit['sellingPrice'],
-                        circuit['contractTerm'],
-                        circuit['startDate']
-                    ))
-
-            conn.commit()
-            conn.close()
-            return True
-
-        except Exception as e:
-            print("Error upserting commission:", e)
-            return False
-
-    def set_commission(self, commission_id, percentage):
-        """
-        Set the commission percentage and calculate commission_value.
-        """
-        try:
-            conn = self.get_connection()
-            with conn.cursor() as cursor:
-                # Get commission record to calculate GP
-                cursor.execute("""
-                    SELECT mrc, selling_price
-                    FROM commissions
-                    WHERE id=%s
-                """, (commission_id,))
-                record = cursor.fetchone()
-                if not record:
-                    return False
-
-                gp = record['selling_price'] - record['mrc']
-                commission_value = gp * (percentage / 100)
-
-                cursor.execute("""
-                    UPDATE commissions
-                    SET commission_percentage=%s,
-                        commission_value=%s,
-                        updated_at=NOW()
-                    WHERE id=%s
-                """, (percentage, commission_value, commission_id))
-
-            conn.commit()
-            conn.close()
-            return True
-
-        except Exception as e:
-            print("Error setting commission:", e)
-            return False
+#============================================================================================================================================
+    # DB OPS WITH COMMISSIONS
+#=============================================================================================================================================
+    
         
     def get_all_commissions(self):
+        """
+        Fetch all commission agreements, including:
+        - Circuit info (number, vendor, mrc, sellingPrice)
+        - Salesperson info
+        - Client / site names
+        - Commission agreement details
+        GP and estimated commission value can be calculated in the frontend.
+        """
         try:
             conn = self.get_connection()
-            with conn.cursor() as c:
+            with conn.cursor(pymysql.cursors.DictCursor) as c:
                 c.execute("""
                     SELECT 
                         c.id,
@@ -512,18 +454,14 @@ class DbUtil:
                         CONCAT(u.name, ' ', u.surname) AS salesperson_name,
                         cir.circuitNumber,
                         cir.vendor,
-                        cir.siteA,
+                        cir.contractTerm,
+                        cir.mrc,
+                        cir.sellingPrice,
                         siteA.site AS siteA_name,
-                        cir.siteB,
                         siteB.site AS siteB_name,
-                        c.mrc,
-                        c.selling_price,
                         c.commission_percentage,
-                        c.commission_value,
-                        c.gp,
-                        c.contract_months,
-                        c.activation_date,
-                        c.first_payment_date,
+                        c.start_date,
+                        c.end_date,
                         c.status,
                         c.notes,
                         c.created_at,
@@ -533,100 +471,234 @@ class DbUtil:
                     LEFT JOIN circuits cir ON c.circuit_id = cir.id
                     LEFT JOIN sites siteA ON cir.siteA = siteA.id
                     LEFT JOIN sites siteB ON cir.siteB = siteB.id
-                    ORDER BY c.created_at DESC;
+                    ORDER BY c.created_at DESC
                 """)
                 results = c.fetchall()
-                col_names = [c[0] for c in c.description]
-                return [dict(zip(col_names, result)) for result in results]
-            
+
             conn.close()
             return results
+
         except Exception as e:
             print("Error fetching commissions:", e)
             return []
 
-
-    def update_commission_on_circuit_change(self, circuit_id):
-        """
-        When a circuit is updated (MRC, Selling Price, Contract Term, etc.),
-        mark the old commission as expired and insert a new one with updated values.
-        """
+    def create_commission(self, circuit_id, salesperson_id, commission_percentage=10.00, start_date=None, end_date=None, status='new', notes=None):
         try:
             conn = self.get_connection()
             with conn.cursor(pymysql.cursors.DictCursor) as c:
-                # 1️⃣ Get latest circuit info
+
+                # 1️⃣ Validate circuit exists
                 c.execute("""
-                    SELECT id, mrc, sellingPrice, contractTerm, startDate, salesPerson
+                    SELECT id
                     FROM circuits
-                    WHERE id=%s
+                    WHERE id = %s
                 """, (circuit_id,))
-                circuit = c.fetchone()
-                if not circuit:
-                    print(f"No circuit found for update_commission_on_circuit_change({circuit_id})")
+                if not c.fetchone():
+                    print(f"create_commission: circuit {circuit_id} not found")
                     return False
 
-                # 2️⃣ Fetch current active commission
-                c.execute("""
-                    SELECT * FROM commissions
-                    WHERE circuit_id=%s AND status='active'
-                """, (circuit_id,))
-                old_commission = c.fetchone()
-
-                if not old_commission:
-                    print(f"No active commission found for circuit {circuit_id}, creating a new one...")
-                    return self.upsert_commission(circuit_id)
-
-                # 3️⃣ Check if key values changed
-                changed = (
-                    old_commission['mrc'] != circuit['mrc'] or
-                    old_commission['selling_price'] != circuit['sellingPrice'] or
-                    old_commission['contract_months'] != circuit['contractTerm']
-                )
-
-                if not changed:
-                    print(f"No commission-impacting changes detected for circuit {circuit_id}")
-                    return True
-
-                # 4️⃣ Expire old commission
+                # 2️⃣ Expire existing commissions (business rule)
                 c.execute("""
                     UPDATE commissions
-                    SET status='expired', updated_at=NOW(), notes='Expired due to circuit update'
-                    WHERE id=%s
-                """, (old_commission['id'],))
+                    SET status = 'expired', updated_at = NOW()
+                    WHERE circuit_id = %s
+                    AND status IN ('new', 'pending', 'active')
+                """, (circuit_id,))
 
-                # 5️⃣ Recalculate GP & Commission value (reuse percentage)
-                gp = circuit['sellingPrice'] - circuit['mrc']
-                percentage = old_commission['commission_percentage'] or 0
-                commission_value = gp * (percentage / 100) if percentage else 0
-
-                # 6️⃣ Insert new commission record
+                # 4️⃣ Insert new commission
                 c.execute("""
                     INSERT INTO commissions (
-                        circuit_id, salesperson_id,
-                        mrc, selling_price, gp,
-                        commission_percentage, commission_value,
-                        contract_months, activation_date,
-                        status, notes, created_at, updated_at
+                        circuit_id,
+                        salesperson_id,
+                        commission_percentage,
+                        start_date,
+                        end_date,
+                        status,
+                        notes,
+                        created_at,
+                        updated_at
                     )
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'active','Auto-updated due to circuit changes',NOW(),NOW())
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
                 """, (
-                    circuit['id'],
-                    circuit['salesPerson'],
-                    circuit['mrc'],
-                    circuit['sellingPrice'],
-                    gp,
-                    percentage,
-                    commission_value,
-                    circuit['contractTerm'],
-                    circuit['startDate']
+                    circuit_id,
+                    salesperson_id,
+                    commission_percentage,
+                    start_date,
+                    end_date,
+                    status,
+                    notes
                 ))
 
             conn.commit()
             conn.close()
-            print(f"Commission updated successfully for circuit {circuit_id}")
             return True
 
         except Exception as e:
-            print("Error updating commission after circuit change:", e)
+            print("Error creating commission:", e)
             return False
 
+    def get_current_commission(self, circuit_id):
+        try:
+            conn = self.get_connection()
+            with conn.cursor(pymysql.cursors.DictCursor) as c:
+                c.execute("""
+                    SELECT *
+                    FROM commissions
+                    WHERE circuit_id=%s AND status IN ('active', 'pending', 'new')
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                """, (circuit_id,))
+                commission = c.fetchone()
+            conn.close()
+            return commission
+        except Exception as e:
+            print("Error fetching current commission:", e)
+            return None
+
+    def expire_active_commission(self, circuit_id, end_date, notes):
+        """
+        Expire the active commission for a circuit.
+        - Sets status='expired' and end_date to the provided value.
+        - Notes can describe the reason (e.g., salesperson change/removal)
+        - Does nothing if no active commission exists.
+        """
+        try:
+            conn = self.get_connection()
+            with conn.cursor(pymysql.cursors.DictCursor) as c:
+
+                c.execute("""
+                    UPDATE commissions
+                    SET status='expired',
+                        end_date=%s,
+                        notes=%s,
+                        updated_at=NOW()
+                    WHERE circuit_id=%s AND status != 'expired'
+                """, (
+                    end_date,
+                    notes,
+                    circuit_id
+                ))
+
+            conn.commit()
+            conn.close()
+            return True
+
+        except Exception as e:
+            print("Error expiring commission:", e)
+            return False
+    
+    def update_commission_status(self, commission_id, status):
+        try:
+            conn = self.get_connection()
+            with conn.cursor() as c:
+                c.execute("""
+                    UPDATE commissions
+                    SET status=%s,
+                        updated_at=NOW()
+                    WHERE id=%s
+                """, (status, commission_id))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print("Error updating commission status:", e)
+            return False
+
+    def get_commission_by_id(self, commission_id):
+        """
+        Fetch a single commission record by its ID, including:
+        - Salesperson name
+        - Circuit info (circuitNumber, vendor)
+        - Client info (siteB_name)
+        Returns a dict or None if not found.
+        """
+        try:
+            conn = self.get_connection()
+            with conn.cursor(pymysql.cursors.DictCursor) as cursor:
+                cursor.execute("""
+                    SELECT 
+                        c.*,
+                        CONCAT(u.name, ' ', u.surname) AS salesperson_name,
+                        cir.circuitNumber,
+                        cir.vendor,
+                        cir.mrc,
+                        cir.sellingPrice,
+                        cir.contractTerm,
+                        cir.siteA,
+                        siteA.site AS siteA_name,
+                        cir.siteB,
+                        siteB.site AS siteB_name
+                    FROM commissions c
+                    LEFT JOIN users u ON c.salesperson_id = u.id
+                    LEFT JOIN circuits cir ON c.circuit_id = cir.id
+                    LEFT JOIN sites siteA ON cir.siteA = siteA.id
+                    LEFT JOIN sites siteB ON cir.siteB = siteB.id
+                    WHERE c.id = %s
+                """, (commission_id,))
+                commission = cursor.fetchone()
+            conn.close()
+            return commission
+        except Exception as e:
+            print("Error fetching commission:", e)
+            return None
+        
+    def update_commission_on_apply(self, commission_id, percentage, status):
+        try:
+            conn = self.get_connection()
+            with conn.cursor() as c:
+                c.execute("""
+                    UPDATE commissions
+                    SET commission_percentage = %s,
+                        status = %s,
+                        updated_at = NOW()
+                    WHERE id = %s
+                """, (percentage, status, commission_id))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print("Error updating commission on apply:", e)
+            return False
+
+    #=============================================================================================================================================
+    # APPROVAL TOKENSS
+    #=============================================================================================================================================
+
+    def create_commission_approval_token(self, commission_id, token, expires_at):
+        conn = self.get_connection()
+        with conn.cursor() as c:
+            c.execute("""
+                INSERT INTO commission_approval_tokens
+                    (commission_id, token, expires_at)
+                VALUES (%s, %s, %s)
+            """, (commission_id, token, expires_at))
+        conn.commit()
+        conn.close()
+
+    def get_valid_approval_token(self, token):
+        conn = self.get_connection()
+        with conn.cursor(pymysql.cursors.DictCursor) as c:
+            c.execute("""
+                SELECT *
+                FROM commission_approval_tokens
+                WHERE token = %s
+                AND used_at IS NULL
+                AND expires_at > NOW()
+            """, (token,))
+            row = c.fetchone()
+        conn.close()
+        return row
+    
+    def mark_approval_token_used(self, token):
+        conn = self.get_connection()
+        with conn.cursor() as c:
+            c.execute("""
+                UPDATE commission_approval_tokens
+                SET used_at = NOW()
+                WHERE token = %s
+            """, (token,))
+        conn.commit()
+        conn.close()
+
+
+ 
