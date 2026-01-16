@@ -770,7 +770,7 @@ def view_logs():
     
 @app.route('/api/commissions', methods=['GET'])
 @jwt_required()
-@role_required(['admin', 'sales', 'technician', 'fiance'])
+@role_required(['admin', 'sales', 'technician', 'finance'])
 def get_commissions():
     try:
         rows = db.get_all_commissions()
