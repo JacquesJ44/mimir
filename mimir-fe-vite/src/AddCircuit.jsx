@@ -469,7 +469,7 @@ const AddCircuit = () => {
                                         <p>Margin: <strong>{(((Number(sellingPrice || 0) - Number(mrc || 0)) / Number(mrc || 1)) * 100).toFixed(2)}%</strong></p>
 
                                         <h3 className="text-md font-semibold mb-2 mt-5 text-gray-700 dark:text-gray-100">📝 Notes</h3>
-                                        <textarea className="textarea textarea-bordered w-full min-h-[200px]" placeholder="e.g., Make dat money yo" />
+                                        <textarea className="textarea textarea-bordered w-full min-h-52" placeholder="e.g., Make dat money yo" />
                                     </div>
                                 </div>
 

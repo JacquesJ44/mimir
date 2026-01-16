@@ -1,18 +1,19 @@
 from flask import Flask
-from flask import jsonify, request, make_response, send_file, send_from_directory
+from flask import jsonify, request, make_response, send_file, send_from_directory, render_template
 from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, unset_jwt_cookies, jwt_required, JWTManager, verify_jwt_in_request, set_access_cookies
 from flask_cors import CORS
 from flask_mail import Mail, Message
 from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
 from itsdangerous import URLSafeTimedSerializer
-from datetime import timedelta, datetime, timezone
+from datetime import timedelta, datetime, timezone, date
 from threading import Thread
 from email.mime.text import MIMEText
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from functools import wraps
 
 import hashlib
+import secrets
 import binascii
 import json
 import os
@@ -61,6 +62,7 @@ app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_USERNAME')
 app.config['RECIPIENT_EMAIL'] = os.getenv('RECIPIENT_EMAIL')
+# app.config["MAIL_SUPPRESS_SEND"] = True
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
@@ -247,6 +249,7 @@ def logout():
     return response
 
 @app.route('/api/register', methods=['POST'])
+@jwt_required()
 @role_required(['admin'])
 def register():
     data = request.get_json()
@@ -373,7 +376,8 @@ def addcircuit():
     if request.method == 'POST':
 
         data = request.get_json()
-        pprint(data)
+        # print("Received data for new circuit:")
+        # pprint(data)
 
         # Handle nullable dates safely
         start_date = data.get('startDate') or None
@@ -381,70 +385,64 @@ def addcircuit():
         
         # Sanitize and format decimal values
         try:
-            mrc_raw = data.get('mrc', '')
-            selling_raw = data.get('sellingPrice', '')
-            # commission_raw = data.get('commission', '')
-
-            data['mrc'] = validate_decimal_field(mrc_raw, 'mrc')
-            data['sellingPrice'] = validate_decimal_field(selling_raw, 'sellingPrice')
-            # data['commission'] = validate_decimal_field(commission_raw, 'commission')
-
+            mrc = validate_decimal_field(data.get('mrc'), 'mrc')
+            selling_price = validate_decimal_field(data.get('sellingPrice'), 'sellingPrice')
         except (ValueError, TypeError) as e:
             return make_response({"error": f"Decimal validation error: {e}"}, 400)
-
-        # Set status
-        status = 'Active'
-
-        # Handle uploaded document name
-        doc_path = data.get('doc')
-        if doc_path:
-            # Expecting only filename, not full path
-            filename = secure_filename(doc_path)
-        else:
-            filename = 'None'
 
         # ✅ Get site IDs from request data
         siteA_id = request.json.get("siteA_id")
         siteB_id = request.json.get("siteB_id")
-
         # Validate site IDs
         if not siteA_id or not siteB_id:
             return make_response({"error": "Both siteA_id and siteB_id are required"}, 400)
-        
         # ✅ Ensure these are integers
         siteA_id = int(siteA_id)
         siteB_id = int(siteB_id)
         
+        # Handle uploaded document name
+        filename = secure_filename(data['doc']) if data.get('doc') else None
+        
         # Use try-except block for DB operation
         try:
             circuit_id = db.save_circuit(
-                data.get('vendor'),
-                data.get('circuitType'),
-                data.get('speed'),
-                data.get('circuitNumber'),
-                data.get('circuitOwner'),
-                data.get('usageFlag'),
-                data.get('enni'),
-                data.get('vlan'),
-                start_date,
-                data.get('contractTerm'),
-                end_date,
-                data['mrc'],
-                data['sellingPrice'],
-                siteA_id,
-                siteB_id,
-                data.get('comments'),
-                status,
-                filename,
-                data.get('salesPerson')
-                # data['commission']
+                vendor=data.get('vendor'),
+                circuit_type=data.get('circuitType'),
+                speed=data.get('speed'),
+                circuit_number=data.get('circuitNumber'),
+                circuit_owner=data.get('circuitOwner'),
+                usage_flag=data.get('usageFlag'),
+                enni=data.get('enni'),
+                vlan=data.get('vlan'),
+                start_date=start_date,
+                contract_term=data.get('contractTerm'),
+                end_date=end_date,
+                mrc=mrc,
+                selling_price=selling_price,
+                siteA_id=siteA_id,
+                siteB_id=siteB_id,
+                comments=data.get('comments'),
+                status='active',
+                doc=filename,
+                salesperson_id=data.get('salesPerson')
             )
 
             if not circuit_id:
                 return jsonify({"msg": "Failed to save circuit"}), 500
         
-            # Update commissions table
-            # db.upsert_commission(circuit_id)
+            # Update commissions table only if there is a salesperson assigned
+            salesperson_id = data.get('salesPerson')
+
+            if salesperson_id:
+                db.create_commission(
+                    circuit_id=circuit_id,
+                    salesperson_id=salesperson_id,
+                    commission_percentage=10.00,
+                    start_date=start_date,
+                    end_date=end_date,
+                    status='new',
+                    notes='Initial commission on circuit creation'
+                )
 
             # ✅ Get user performing the update for logging
             claims = get_jwt()
@@ -587,74 +585,145 @@ def update_circuit(id):
 
     if request.method == 'PUT':
         data = request.get_json()
-        # pprint(data)
 
-        # Sanitize and format decimal values
+        # ───────────────────────────────
+        # Decimal sanitisation
+        # ───────────────────────────────
         try:
-            mrc_raw = data.get('mrc', '')
-            selling_raw = data.get('sellingPrice', '')
-
-            data['mrc'] = validate_decimal_field(mrc_raw, 'mrc')
-            data['sellingPrice'] = validate_decimal_field(selling_raw, 'sellingPrice')
+            data['mrc'] = validate_decimal_field(data.get('mrc', ''), 'mrc')
+            data['sellingPrice'] = validate_decimal_field(
+                data.get('sellingPrice', ''), 'sellingPrice'
+            )
         except (ValueError, TypeError) as e:
             return make_response({"error": f"Decimal validation error: {e}"}, 400)
 
-        # Handle uploaded document name
+        # ───────────────────────────────
+        # Document handling
+        # ───────────────────────────────
         doc_path = data.get('doc')
         if doc_path:
             try:
-                filename = secure_filename(doc_path.split('\\')[-1])  # Handles Windows paths
-                data['doc'] = filename
+                data['doc'] = secure_filename(doc_path.split('\\')[-1])
             except Exception:
                 data['doc'] = 'None'
         else:
             data['doc'] = 'None'
 
-        # Attempt to update circuit fields
         try:
-            # ✅ Fetch old data for comparison
+            # ───────────────────────────────
+            # Fetch existing circuit
+            # ───────────────────────────────
             old_data = db.search_circuit_to_view(id)
             if not old_data:
                 return jsonify({'error': 'Circuit not found'}), 404
-            
-            # Update circuit
+
+            # Update circuit first
             success = db.update_circuit(id, **data)
-
-            if success > 0:
-                # ✅ Get user performing the update
-                claims = get_jwt()
-                # role = claims.get("role")
-                user_id = claims.get("email")
-
-                # ✅ Ensure commission row exists / updated with latest circuit fields
-                # db.update_commission_on_circuit_change(id)
-
-
-                # ✅ Create log description
-                details = describe_changes_log(
-                    old_data, data, fields=[
-                        'vendor', 'circuitType', 'speed', 'circuitNumber', 'circuitOwner',
-                        'enni', 'vlan', 'startDate', 'contractTerm', 'endDate',
-                        'mrc', 'sellingPrice', 'siteA_id', 'siteB_id', 'status', 'comments', 'doc', 'salesPerson'
-                    ]
-                )
-
-                # ✅ Log the change
-                db.log_action(
-                    user_id=user_id,
-                    action="update",
-                    target_table="circuits",
-                    target_id=id,
-                    details=details
-                )
-                # return '', 204  # No Content response
-                return jsonify({'message': 'Circuit updated successfully'}), 200
-            else:
+            if success <= 0:
                 return jsonify({'error': 'No changes made'}), 204
-            
+
+            # User context
+            claims = get_jwt()
+            user_id = claims.get("email")
+
+            # ───────────────────────────────
+            # Commission handling
+            # ───────────────────────────────
+            old_salesperson = old_data.get("salesPerson")
+            new_salesperson = data.get("salesPerson")
+            today = date.today()
+
+            # Flag if key circuit data changed
+            circuit_changed = (
+                old_data.get('mrc') != data.get('mrc') or
+                old_data.get('sellingPrice') != data.get('sellingPrice') or
+                old_data.get('contractTerm') != data.get('contractTerm')
+            )
+
+            # -----------------------------
+            # CASE 1: First salesperson ever assigned
+            # -----------------------------
+            if not old_salesperson and new_salesperson:
+                db.create_commission(
+                    circuit_id=id,
+                    salesperson_id=new_salesperson,
+                    start_date=old_data.get("startDate"),
+                    end_date=old_data.get("endDate"),
+                    commission_percentage=10,  # default
+                    status='new',          # requires approval
+                    notes="Initial commission on circuit update"
+    )
+
+            # ----------------------------------------------------------
+            # CASE 2: Salesperson changed OR key circuit fields changed
+            # ----------------------------------------------------------
+            elif old_salesperson and (new_salesperson != old_salesperson or circuit_changed):
+                # Expire old active/pending commission
+                existing_commission = db.get_current_commission(circuit_id=id)
+                # print("Current commission to expire:", existing_commission)
+                if existing_commission:
+                    db.expire_active_commission(
+                        circuit_id=id,
+                        end_date=today,
+                        notes=f"Upgrade, renewal, or salesperson changed (previous commission id {existing_commission['id']})"
+                    )
+
+                # Create new commission for new salesperson or updated circuit
+                if new_salesperson:
+                    db.create_commission(
+                        circuit_id=id,
+                        salesperson_id=new_salesperson,
+                        start_date=today,                  # remainder period
+                        end_date=old_data.get("endDate"),
+                        commission_percentage=10,          # default
+                        status='new',                  # approval required
+                        notes=f"Commission created for new salesperson / upgrade (replacing commission id {existing_commission['id'] if existing_commission else 'N/A'})"
+                    )
+
+            # -----------------------------
+            # CASE 3: Salesperson removed
+            # -----------------------------
+            elif old_salesperson and not new_salesperson:
+                db.expire_active_commission(
+                    circuit_id=id,
+                    end_date=today,
+                    notes="Salesperson removed"
+                )
+
+            # CASE 4: No change → do nothing
+
+
+            # ───────────────────────────────
+            # Audit logging
+            # ───────────────────────────────
+            details = describe_changes_log(
+                old_data,
+                data,
+                fields=[
+                    'vendor', 'circuitType', 'speed', 'circuitNumber',
+                    'circuitOwner', 'enni', 'vlan', 'startDate',
+                    'contractTerm', 'endDate', 'mrc', 'sellingPrice',
+                    'siteA_id', 'siteB_id', 'status',
+                    'comments', 'doc', 'salesPerson'
+                ]
+            )
+
+            db.log_action(
+                user_id=user_id,
+                action="update",
+                target_table="circuits",
+                target_id=id,
+                details=details
+            )
+
+            return jsonify({'message': 'Circuit updated successfully'}), 200
+
         except Exception as e:
             print(f"Database error: {e}")
-            return make_response({"error": "Unable to update circuit: Database error: " + str(e)}, 500)
+            return make_response(
+                {"error": f"Unable to update circuit: {e}"},
+                500
+            )
 
 @app.route('/api/download/<id>', methods=['GET'])
 @jwt_required()
@@ -693,7 +762,7 @@ def view_logs():
     try:
         # print("VIEW_LOGS ROUTE HIT ✅")
         rows = db.view_logs()
-        # print("ROWS:", rows)
+        # pprint(rows)
         return jsonify(rows)
     except Exception as e:
         print("ERROR:", str(e))
@@ -701,13 +770,140 @@ def view_logs():
     
 @app.route('/api/commissions', methods=['GET'])
 @jwt_required()
-@role_required(['admin', 'sales', 'technician'])
+@role_required(['admin', 'sales', 'technician', 'fiance'])
 def get_commissions():
     try:
         rows = db.get_all_commissions()
         return jsonify(rows)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+from flask import render_template
+
+@app.route("/api/commissions/apply", methods=["POST"])
+@jwt_required()
+@role_required(['admin', 'sales', 'technician'])
+def apply_commission():
+    data = request.get_json()
+
+    commission_id = data.get("commission_id")
+    new_percentage = data.get("commission_percentage")
+
+    if commission_id is None or new_percentage is None:
+        return jsonify({"error": "commission_id and commission_percentage are required"}), 400
+
+    try:
+        new_percentage = Decimal(new_percentage)
+    except Exception:
+        return jsonify({"error": "Invalid commission percentage"}), 400
+
+    if new_percentage < 0 or new_percentage > 100:
+        return jsonify({"error": "Commission percentage must be between 0 and 100"}), 400
+
+    # 1️⃣ Fetch commission
+    commission = db.get_commission_by_id(commission_id)
+    # print("Fetched commission:")
+    # pprint(commission)
+
+    if not commission:
+        return jsonify({"error": "Commission not found"}), 404
+
+    # 🚫 SAFEGUARD
+    if commission["status"] not in ("new", "paused"):
+        return jsonify({
+            "error": f"Commission cannot be applied in '{commission['status']}' state"
+        }), 400
+
+    try:
+        #  Update agreement only
+        db.update_commission_on_apply(
+            commission_id=commission_id,
+            percentage=new_percentage,
+            status="pending"
+        )
+
+        # Create approval token
+        token = secrets.token_urlsafe(32)
+        expires_at = datetime.utcnow() + timedelta(days=7)
+
+        db.create_commission_approval_token(
+            commission_id=commission_id,
+            token=token,
+            expires_at=expires_at
+        )
+
+        # 3️⃣ Indicative values for email only
+        gp = commission["sellingPrice"] - commission["mrc"]
+        indicative_value = (
+            gp * (new_percentage / Decimal(100))
+        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+        approve_url = (
+        f"{os.getenv('APP_BASE_URL')}"
+        f"/api/commissions/approve?token={token}&approve=true"
+        )
+        reject_url = (
+            f"{os.getenv('APP_BASE_URL')}"
+            f"/api/commissions/approve?token={token}&approve=false"
+        )
+
+        msg = Message(
+            subject=f"Commission Approval Request - ID {commission_id}",
+            sender=os.getenv("MAIL_DEFAULT_SENDER"),
+            recipients=[os.getenv("RECIPIENT_EMAIL")],
+            html=render_template(
+                "commission_approval.html",
+                salesperson_name=commission["salesperson_name"],
+                circuit_number=commission["circuitNumber"],
+                client_name=commission["siteB_name"],
+                gp=gp,
+                commission_percentage=new_percentage,
+                indicative_value=indicative_value,
+                months=commission["contractTerm"],
+                notes=commission["notes"],
+                approve_url=approve_url,
+                reject_url=reject_url
+            )
+        )
+
+        mail.send(msg)
+
+        return jsonify({"message": "Commission submitted for approval"}), 200
+
+    except Exception as e:
+        print("Error submitting commission:", e)
+        return jsonify({"error": "Failed to submit commission"}), 500
+
+@app.route("/api/commissions/approve", methods=["GET"])
+def approve_commission():
+    token = request.args.get("token")
+    approve = request.args.get("approve") == "true"
+
+    if not token:
+        return "Missing approval token", 400
+
+    token_row = db.get_valid_approval_token(token)
+    if not token_row:
+        return "Invalid or expired approval link", 400
+
+    commission = db.get_commission_by_id(token_row["commission_id"])
+    if not commission:
+        return "Commission not found", 404
+
+    if commission["status"] != "pending":
+        return "Commission is no longer pending", 400
+
+    if approve:
+        db.update_commission_status(commission["id"], "active")
+        result = "Commission approved"
+    else:
+        db.update_commission_status(commission["id"], "new")
+        result = "Commission rejected"
+
+    db.mark_approval_token_used(token)
+
+    return result
+
 
 # Serve React frontend
 @app.route("/", defaults={"path": ""})

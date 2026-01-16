@@ -113,9 +113,9 @@ const Navbar = ({ token, setToken, message, setMessage }) => {
               {getLinksByRole(role).includes("Logs") && (
                 <li className="mx-2"><Link to="/logs">Logs</Link></li>
               )}
-              {/* {getLinksByRole(role).includes("Commission") && (
+              {getLinksByRole(role).includes("Commission") && (
                 <li className="mx-2"><Link to="/commission">Commission</Link></li>
-              )} */}
+              )}
               <li className="mx-2">
                 <button onClick={handleLogout} className="btn btn-outline btn-sm">Logout</button>
                 {message}
