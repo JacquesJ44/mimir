@@ -279,7 +279,7 @@ def navbar():
         "role": claims.get("role")
     })
 
-@app.route("/api/dashboard", methods=["GET"])
+@app.route("/mimir/api/dashboard", methods=["GET"])
 @jwt_required()
 @role_required(['admin', 'sales', 'finance'])
 def circuits_grouped_by_vendor_and_type():
@@ -290,8 +290,8 @@ def circuits_grouped_by_vendor_and_type():
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
-@app.route('/api/dashboard/vendor/<vendor_name>', methods=['GET'])
+
+@app.route('/mimir/api/dashboard/vendor/<vendor_name>', methods=['GET'])
 @jwt_required()
 @role_required(['admin', 'sales', 'finance'])
 def get_vendor_circuits(vendor_name):

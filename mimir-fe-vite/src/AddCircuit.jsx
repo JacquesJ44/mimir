@@ -15,7 +15,7 @@ const AddCircuit = () => {
     const [salesPersons, setSalesPersons] = useState([]);
 
     useEffect(() => {
-        fetch("/circuit-options.json")
+        fetch("/mimir/circuit-options.json")
             .then((res) => res.json())
             .then((data) => {
             setVendors(data.vendors);
@@ -140,6 +140,8 @@ const AddCircuit = () => {
         try {
             // 2. Submit form data first
             const saveRes = await axios.post('/api/circuits/addcircuit', circuitData, {
+            // 2. Submit form data first
+            const saveRes = await axios.post('/mimir/api/circuits/addcircuit', circuitData, {
                 headers: { 'Content-Type': 'application/json' },
                 withCredentials: true
             });
@@ -175,7 +177,7 @@ const AddCircuit = () => {
                 }
 
                 try {
-                    await axios.post('/api/upload', formData, {
+                    await axios.post('/mimir/api/upload', formData, {
                         headers: { 'Content-Type': 'multipart/form-data' },
                             withCredentials: true
                     });
@@ -309,6 +311,18 @@ const AddCircuit = () => {
                                         className="relative w-20 h-8 bg-gray-200 dark:bg-gray-700 rounded-full cursor-pointer select-none"
                                         onClick={() => setCircuitOwner(circuitOwner === 'Aesir' ? 'Ikeja' : 'Aesir')}
                                     >
+                                        <div
+                                        className={`absolute top-0 left-0 w-10 h-8 bg-white dark:bg-gray-600 rounded-full shadow-md transform transition-transform duration-300 ${
+                                            circuitOwner === 'Ikeja' ? 'translate-x-full' : 'translate-x-0'
+                                        }`}
+                                        />
+                                        <div className="absolute inset-0 flex items-center justify-between px-2 text-xs font-semibold pointer-events-none">
+                                        <span className={circuitOwner === 'Aesir' ? 'text-blue-600' : 'text-gray-400'}>
+                                            <img src="/mimir/aesirblue.png" alt="Aesir Logo" className="h-8 object-contain" />
+                                        </span>
+                                        <span className={circuitOwner === 'Ikeja' ? 'text-green-600' : 'text-gray-400'}>
+                                            <img src="/mimir/ikejalogo1.png" alt="Ikeja Logo" className="h-5 object-contain" />
+                                        </span>
                                         <div
                                         className={`absolute top-0 left-0 w-10 h-8 bg-white dark:bg-gray-600 rounded-full shadow-md transform transition-transform duration-300 ${
                                             circuitOwner === 'Ikeja' ? 'translate-x-full' : 'translate-x-0'

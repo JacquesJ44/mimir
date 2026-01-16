@@ -13,7 +13,7 @@ const UpdateCircuit = () => {
     const [salesPersons, setSalesPersons] = useState([]);
 
     useEffect(() => {
-        fetch("/circuit-options.json")
+        fetch("/mimir/circuit-options.json")
             .then((res) => res.json())
             .then((data) => {
             // Vendors you want to support
@@ -137,6 +137,8 @@ const UpdateCircuit = () => {
 
             const fileInput = document.getElementById("formFile");
             const selectedFile = fileInput?.files?.[0];
+            
+            // Contruct circuit data
 
             // Build circuit payload
             const circuitData = {
@@ -190,6 +192,41 @@ const UpdateCircuit = () => {
                 } catch (uploadErr) {
                     console.error("Upload failed:", uploadErr);
                     alert("Circuit updated, but file upload failed.");
+                doc: selectedFile?.name || doc || null, // optionally store filename
+                salesPerson: usageFlag === 'Client' ? salesPerson : null,
+                commission: usageFlag === 'Client' ? commission : null
+            };
+            
+            // 🔎 1. Validate and send circuit data first
+            try {
+                const res = await axios.put(`/mimir/api/circuits/updatecircuit/${id}`, circuitData, {
+                    headers: { 'Content-Type': 'application/json' },
+                    withCredentials: true
+                });
+
+                if (res.status === 200) {
+                    setShowSuccess(true);
+
+                    // ✅ 2. If circuit update was successful and file selected, upload it
+                    if (selectedFile) {
+                        const formData = new FormData();
+                        formData.append('doc', selectedFile);
+
+                        try {
+                            await axios.post('/mimir/api/upload', formData, {
+                                headers: { 'Content-Type': 'multipart/form-data' },
+                                withCredentials: true
+                            });
+                        } catch (uploadErr) {
+                            console.error('Upload failed:', uploadErr);
+                            alert('File upload failed (circuit was updated).');
+                        }
+                    }
+
+                    // ✅ 3. Navigate away after brief delay
+                    setTimeout(() => navigate('/circuits'), 1500);
+                } else if (res.status === 204) {
+                    console.log('No changes made to the circuit.');
                 }
                 }
 

@@ -23,7 +23,7 @@ const Circuits = () => {
     const [circuitTypes, setCircuitTypes] = useState([]);
 
     useEffect(() => {
-        fetch("/circuit-options.json")
+        fetch("/mimir/circuit-options.json")
             .then((res) => res.json())
             .then((data) => {
             setVendorOptions(data.vendors);
