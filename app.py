@@ -31,7 +31,7 @@ load_dotenv()
 db = DbUtil({
     'host': os.getenv('DB_HOST'),
     'user': os.getenv('DB_USER'),
-    'password': os.getenv('DB_PASSWORD'),
+    #'password': os.getenv('DB_PASSWORD'),
     'db': os.getenv('DB_NAME')
 })
 
@@ -857,11 +857,11 @@ def apply_commission():
 
         approve_url = (
         f"{os.getenv('APP_BASE_URL')}"
-        f"/api/commissions/approve?token={token}&approve=true"
+        f"/mimir/api/commissions/approve?token={token}&approve=true"
         )
         reject_url = (
             f"{os.getenv('APP_BASE_URL')}"
-            f"/api/commissions/approve?token={token}&approve=false"
+            f"/mimir/api/commissions/approve?token={token}&approve=false"
         )
 
         msg = Message(
@@ -913,9 +913,9 @@ def approve_commission():
             "This request can no longer be processed."
         ), 400
     
-    if commission["approval_expires_at"] < datetime.utcnow():
-        db.reset_commission(commission["id"])
-        return "Approval link expired. Commission reset.", 410
+#    if commission["expires_at"] < datetime.utcnow():
+#        db.reset_commission(commission["id"])
+#        return "Approval link expired. Commission reset.", 410
 
     if approve:
         db.update_commission_status(commission["id"], "active")

@@ -11,7 +11,7 @@ class DbUtil:
         return pymysql.connect(
             host=self.config['host'],
             user=self.config['user'],
-            password=self.config['password'],
+#            password=self.config['password'],
             db=self.config['db'],
             cursorclass=pymysql.cursors.Cursor  # or DictCursor if you prefer
         )
