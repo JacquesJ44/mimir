@@ -1,5 +1,5 @@
 // src/pages/Commissions.js
-import React, { useEffect, useState, Fragment } from "react";
+import React, { useEffect, useState, Fragment, use } from "react";
 import axios from "./AxiosInstance"; 
 import { Loader2 } from "lucide-react";
 
@@ -27,20 +27,20 @@ const Commissions = () => {
     setExpandedRow(prev => (prev === id ? null : id));
   };
 
+  const fetchCommissions = async () => {
+    try {
+      const res = await axios.get("/api/commissions");
+      setCommissions(res.data);
+      // console.log("Fetched commissions:", res.data);
+    } catch (err) {
+      console.error("Error fetching commissions:", err);
+      setError("Failed to load commissions.");
+    } finally {
+      setLoading(false);
+    }
+  };
+  
   useEffect(() => {
-    const fetchCommissions = async () => {
-      try {
-        const res = await axios.get("/api/commissions");
-        setCommissions(res.data);
-        // console.log("Fetched commissions:", res.data);
-      } catch (err) {
-        console.error("Error fetching commissions:", err);
-        setError("Failed to load commissions.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchCommissions();
   }, []);
 
@@ -86,6 +86,10 @@ const Commissions = () => {
 
       console.log("Response from server:", res.data);
       alert("Commission submitted for approval");
+
+      // ✅ This runs AFTER user clicks OK
+      await fetchCommissions();
+
     } catch (err) {
       console.error("Error submitting commission:", err.response?.data || err);
       alert("Failed to submit commission");

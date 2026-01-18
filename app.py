@@ -13,6 +13,7 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from functools import wraps
 
 import hashlib
+import random
 import secrets
 import binascii
 import json
@@ -70,6 +71,22 @@ serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
 
 jwt = JWTManager(app)
 mail = Mail(app)
+
+POSITIVE_GIFS = [
+    "https://media.giphy.com/media/111ebonMs90YLu/giphy.gif",
+    "https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExdHN3dzgxY29iZnF1bzE0dXo0dGpjMGh6eTB1Z3czYmw4bDJmdzl1eiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/NEvPzZ8bd1V4Y/giphy.gif",
+    "https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExbmFxbmU4eG1uNHM3MGVycXl5bjZwMDc5NW90bGY3dmhpbTBndDl1ayZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/a0h7sAqON67nO/giphy.gif",
+    "https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExdDhpcHNnbjRveHI3b25vamtzaTJkNGcyNjNuOWRkdm1ubjNzNGFxeiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/pa37AAGzKXoek/giphy.gif",
+    "https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExM2kya2lsMmVrN3BmcGdibXA4cGNkNmczN3htMmJzeTZzOTdzbGhmaSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Z2VgDwy1IjJUQ/giphy.gif",
+]
+
+NEGATIVE_GIFS = [
+    "https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExc3ZwNWFhcTh4azBnOWc4ejBrM2Q1M25oODNlNHhzaWNvNHIyY2lmNSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/a2fVCj2CudIiY/giphy.gif",
+    "https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExMWx6ZjYyMmVid3FuOWYyZTFpM2t3dmg0MzgxaHJubGdlcHc4ZDl1eiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/EtB1yylKGGAUg/giphy.gif",
+    "https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExbmgzMWd5Y3N2bGhnNjQyMjBjOHF5ZTN5M2xpMzZ6NWN4ZW5kMnZhdSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/CJxXHfRAYvtqU/giphy.gif",
+    "https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExaGZ4d2J1ZnJlY2d3dDNvd2hldm5lN3VxaDV5cjZ6OTVxZmphMTJhcSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/aKAyzum9Xe0mGFjc9m/giphy.gif"
+    "https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExZTJsOTRpcXU2YmpvZjZqMGR4cmFnbnVnazU2bDF0aHozenVmNHFoMiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/STfLOU6iRBRunMciZv/giphy.gif"
+]
 
 # USER BASED ROLES ARE DEFINED AS FOLLOWS:
 # admin - full access
@@ -891,19 +908,34 @@ def approve_commission():
         return "Commission not found", 404
 
     if commission["status"] != "pending":
-        return "Commission is no longer pending", 400
+        return (
+            f"Invalid commission state '{commission['status']}'. "
+            "This request can no longer be processed."
+        ), 400
+    
+    if commission["approval_expires_at"] < datetime.utcnow():
+        db.reset_commission(commission["id"])
+        return "Approval link expired. Commission reset.", 410
 
     if approve:
         db.update_commission_status(commission["id"], "active")
-        result = "Commission approved"
+        gif_url = random.choice(POSITIVE_GIFS)
+        title = "Commission Approved"
+        message = "The commission has been successfully approved."
     else:
         db.update_commission_status(commission["id"], "new")
-        result = "Commission rejected"
+        gif_url = random.choice(NEGATIVE_GIFS)
+        title = "Commission Rejected"
+        message = "The commission has been rejected and reset."
 
     db.mark_approval_token_used(token)
-
-    return result
-
+    
+    return render_template(
+        "commission_result.html",
+        title=title,
+        message=message,
+        gif_url=gif_url
+    )
 
 # Serve React frontend
 @app.route("/", defaults={"path": ""})
