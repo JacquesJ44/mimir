@@ -40,7 +40,7 @@ const Sites = () => {
             city: city,
             province: province,
         };
-        axios.post('/api/sites', form, { withCredentials: true })
+        axios.post('/mimir/api/sites', form, { withCredentials: true })
         .then(res => {
             setData(res.data);
         })
