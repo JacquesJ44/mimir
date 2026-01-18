@@ -659,6 +659,26 @@ class DbUtil:
         except Exception as e:
             print("Error updating commission on apply:", e)
             return False
+        
+    def reset_commission(self, commission_id):
+        try:
+            conn = self.get_connection()
+            with conn.cursor() as c:
+                c.execute("""
+                    UPDATE commissions
+                    SET
+                        status = 'new',
+                        commission_percentage = 10.00,
+                        notes = NULL,
+                        updated_at = NOW()
+                    WHERE id = %s
+                    AND status = 'pending'
+                """, (commission_id,))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"Error resetting commission {commission_id}:", e)
+            raise
 
     #=============================================================================================================================================
     # APPROVAL TOKENSS
