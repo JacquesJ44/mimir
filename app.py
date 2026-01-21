@@ -859,7 +859,7 @@ def apply_commission():
 
         # Create approval token
         token = secrets.token_urlsafe(32)
-        expires_at = datetime.utcnow() + timedelta(minutes=122)
+        expires_at = datetime.utcnow() + timedelta(days=7)
 
         db.create_commission_approval_token(
             commission_id=commission_id,
