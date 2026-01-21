@@ -13,7 +13,7 @@ const UpdateCircuit = () => {
     const [salesPersons, setSalesPersons] = useState([]);
 
     useEffect(() => {
-        fetch("/circuit-options.json")
+        fetch("/mimir/circuit-options.json")
             .then((res) => res.json())
             .then((data) => {
             // Vendors you want to support
@@ -84,7 +84,7 @@ const UpdateCircuit = () => {
     useEffect(() => {
         window.scrollTo(0, 0);
 
-        axios.get(`/api/circuits/updatecircuit/${id}`)
+        axios.get(`/mimir/api/circuits/updatecircuit/${id}`)
             .then(res => {
             const { circuit, salespersons } = res.data;
 
@@ -159,7 +159,7 @@ const UpdateCircuit = () => {
             try {
                 // 1️⃣ Update circuit FIRST
                 const res = await axios.put(
-                `/api/circuits/updatecircuit/${id}`,
+                `/mimir/api/circuits/updatecircuit/${id}`,
                 circuitData,
                 {
                     headers: { "Content-Type": "application/json" },
@@ -183,7 +183,7 @@ const UpdateCircuit = () => {
                 formData.append("doc", selectedFile);
 
                 try {
-                    await axios.post("/api/upload", formData, {
+                    await axios.post("/mimir/api/upload", formData, {
                     headers: { "Content-Type": "multipart/form-data" },
                     withCredentials: true,
                     });

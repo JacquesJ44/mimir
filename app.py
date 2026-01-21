@@ -31,7 +31,7 @@ load_dotenv()
 db = DbUtil({
     'host': os.getenv('DB_HOST'),
     'user': os.getenv('DB_USER'),
-    'password': os.getenv('DB_PASSWORD'),
+    #'password': os.getenv('DB_PASSWORD'),
     'db': os.getenv('DB_NAME')
 })
 
@@ -180,7 +180,7 @@ def validate_decimal_field(value, field_name):
     # ROUTES
 
 #Login Route
-@app.route('/api/login', methods=['POST'])
+@app.route('/mimir/api/login', methods=['POST'])
 def login():
     if not request.is_json:
         return jsonify({"msg": "Invalid request: JSON required"}), 400
@@ -225,7 +225,7 @@ def login():
     return jsonify({"access_token": access_token}), 200
 
 # Route for forgotten password
-@app.route('/api/forgot-password', methods=['POST'])
+@app.route('/mimir/api/forgot-password', methods=['POST'])
 def forgot_password():
     data = request.get_json()
     email = data.get('email')
@@ -235,7 +235,7 @@ def forgot_password():
     if user:
         token = serializer.dumps(email, salt='password-reset')
         # reset_url = url_for('reset_password', token=token, _external=True)
-        reset_url = f"http://mimir.aesir.co.za/reset-password/{token}"
+        reset_url = f"{os.getenv('APP_BASE_URL')}/reset-password/{token}"
 
         # Launch email sending in a background thread
         Thread(target=send_reset_email, args=(app, email, reset_url)).start()
@@ -244,7 +244,7 @@ def forgot_password():
 
 
 # Route for password reset
-@app.route('/api/reset-password/<token>', methods=['POST'])
+@app.route('/mimir/api/reset-password/<token>', methods=['POST'])
 def reset_password(token):
     data = request.get_json()
     new_password = data.get('new_password')  # Make sure to hash this in production
@@ -261,13 +261,13 @@ def reset_password(token):
     return jsonify({'message': 'Password reset successfully'}), 200
 
 # Logout route
-@app.route("/api/logout", methods=["POST"])
+@app.route("/mimir/api/logout", methods=["POST"])
 def logout():
     response = jsonify({"msg": "logout successful"})
     unset_jwt_cookies(response)
     return response
 
-@app.route('/api/register', methods=['POST'])
+@app.route('/mimir/api/register', methods=['POST'])
 @jwt_required()
 @role_required(['admin'])
 def register():
@@ -287,7 +287,7 @@ def register():
     return jsonify({"msg": "Registration successful"})
 
 #Navbar route - where authentication takes place
-@app.route("/api/navbar")
+@app.route("/mimir/api/navbar")
 @jwt_required()
 def navbar():
     current_user_id = get_jwt_identity()
@@ -298,7 +298,7 @@ def navbar():
         "role": claims.get("role")
     })
 
-@app.route("/api/dashboard", methods=["GET"])
+@app.route("/mimir/api/dashboard", methods=["GET"])
 @jwt_required()
 @role_required(['admin', 'sales', 'finance'])
 def circuits_grouped_by_vendor_and_type():
@@ -310,14 +310,14 @@ def circuits_grouped_by_vendor_and_type():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
-@app.route('/api/dashboard/vendor/<vendor_name>', methods=['GET'])
+@app.route('/mimir/api/dashboard/vendor/<vendor_name>', methods=['GET'])
 @jwt_required()
 @role_required(['admin', 'sales', 'finance'])
 def get_vendor_circuits(vendor_name):
     circuits = db.get_circuits_by_vendor(vendor_name)  # write this function
     return jsonify(circuits)
 
-@app.route('/api/circuits', methods=['GET', 'POST'])
+@app.route('/mimir/api/circuits', methods=['GET', 'POST'])
 @jwt_required()
 @role_required(['admin', 'sales', 'technician'])
 def circuits():
@@ -363,7 +363,7 @@ def circuits():
         return jsonify(rows), 200
     return jsonify({"error": "No entries found"}), 404
 
-@app.route('/api/sites', methods=['GET', 'POST'])
+@app.route('/mimir/api/sites', methods=['GET', 'POST'])
 @jwt_required()
 @role_required(['admin', 'sales', 'technician'])
 def sites():
@@ -383,7 +383,7 @@ def sites():
         return jsonify(rows), 200
     return jsonify({"error": "No entries found"}), 404
         
-@app.route('/api/circuits/addcircuit', methods=['GET','POST'])
+@app.route('/mimir/api/circuits/addcircuit', methods=['GET','POST'])
 @jwt_required()
 @role_required(['admin', 'sales', 'technician'])
 def addcircuit():
@@ -489,7 +489,7 @@ def addcircuit():
             print(f"Database error: {e}")
             return make_response({"error": "Unable to save circuit: Database error: " + str(e)}, 500)
 
-@app.route('/api/upload', methods=['POST'])
+@app.route('/mimir/api/upload', methods=['POST'])
 @jwt_required()
 @role_required(['admin', 'sales', 'technician'])
 def upload():
@@ -520,7 +520,7 @@ def upload():
     except Exception as e:
         return make_response(jsonify({"error": f"Failed to save file: {str(e)}"}), 500)
     
-@app.route('/api/sites/addsite', methods=['GET', 'POST'])
+@app.route('/mimir/api/sites/addsite', methods=['GET', 'POST'])
 @jwt_required()
 @role_required(['admin', 'sales', 'technician'])
 def addsite():
@@ -548,7 +548,7 @@ def addsite():
         )
         return jsonify({"msg": "Site successfully added"}), 200    
         
-@app.route('/api/circuits/viewcircuit/<int:id>', methods=['GET'])
+@app.route('/mimir/api/circuits/viewcircuit/<int:id>', methods=['GET'])
 @jwt_required()
 @role_required(['admin', 'sales', 'technician'])
 def view_circuit(id):
@@ -560,7 +560,7 @@ def view_circuit(id):
         return jsonify(data)
     return jsonify({'error': 'Circuit not found'}), 404
 
-@app.route('/api/sites/viewsite/<site>', methods=['GET', 'DELETE'])
+@app.route('/mimir/api/sites/viewsite/<site>', methods=['GET', 'DELETE'])
 @jwt_required()
 @role_required(['admin', 'sales', 'technician'])
 def view_site(site):
@@ -578,7 +578,7 @@ def view_site(site):
         return jsonify({"error": "No site found"}), 404
 
 
-@app.route('/api/circuits/updatecircuit/<id>', methods=['GET', 'PUT'])
+@app.route('/mimir/api/circuits/updatecircuit/<id>', methods=['GET', 'PUT'])
 @jwt_required()
 @role_required(['admin', 'sales', 'technician'])
 def update_circuit(id):
@@ -744,7 +744,7 @@ def update_circuit(id):
                 500
             )
 
-@app.route('/api/download/<id>', methods=['GET'])
+@app.route('/mimir/api/download/<id>', methods=['GET'])
 @jwt_required()
 @role_required(['admin', 'sales', 'technician'])
 def download(id):
@@ -766,7 +766,7 @@ def download(id):
     else:
         return jsonify({"error": "File not found"}), 404
     
-@app.route('/api/getsite', methods=['POST'])
+@app.route('/mimir/api/getsite', methods=['POST'])
 @jwt_required()
 def get_site():
     data = request.get_json()
@@ -774,7 +774,7 @@ def get_site():
     results = db.search_sitename(search_term)
     return jsonify(results)
 
-@app.route('/api/logs', methods=['GET'])
+@app.route('/mimir/api/logs', methods=['GET'])
 @jwt_required()
 @role_required(['admin'])
 def view_logs():
@@ -787,7 +787,7 @@ def view_logs():
         print("ERROR:", str(e))
         return jsonify({"error": str(e)}), 500
     
-@app.route('/api/commissions', methods=['GET'])
+@app.route('/mimir/api/commissions', methods=['GET'])
 @jwt_required()
 @role_required(['admin', 'sales', 'finance', 'technician'])
 def get_commissions():
@@ -815,7 +815,7 @@ def get_commissions():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/commissions/apply", methods=["POST"])
+@app.route("/mimir/api/commissions/apply", methods=["POST"])
 @jwt_required()
 @role_required(['admin', 'sales', 'technician'])
 def apply_commission():
@@ -875,11 +875,11 @@ def apply_commission():
 
         approve_url = (
         f"{os.getenv('APP_BASE_URL')}"
-        f"/api/commissions/approve?token={token}&approve=true"
+        f"/mimir/api/commissions/approve?token={token}&approve=true"
         )
         reject_url = (
             f"{os.getenv('APP_BASE_URL')}"
-            f"/api/commissions/approve?token={token}&approve=false"
+            f"/mimir/api/commissions/approve?token={token}&approve=false"
         )
 
         msg = Message(
@@ -909,7 +909,7 @@ def apply_commission():
         print("Error submitting commission:", e)
         return jsonify({"error": "Failed to submit commission"}), 500
 
-@app.route("/api/commissions/approve", methods=["GET"])
+@app.route("/mimir/api/commissions/approve", methods=["GET"])
 def approve_commission():
     token = request.args.get("token")
     approve = request.args.get("approve") == "true"

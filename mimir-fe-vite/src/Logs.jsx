@@ -5,7 +5,7 @@ const LogsPage = () => {
   const [logs, setLogs] = useState([]);
 
   useEffect(() => {
-    axios.get("/api/logs")
+    axios.get("/mimir/api/logs")
       .then((res) => {
         setLogs(res.data)
         // console.log("Fetched logs:", res.data);

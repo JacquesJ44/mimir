@@ -13,7 +13,7 @@ const ViewCircuit = () => {
     const fetchData = async () => {
       try {
         window.scrollTo(0, 0);
-        const res = await axios.get(`/api/circuits/viewcircuit/${id}`);
+        const res = await axios.get(`/mimir/api/circuits/viewcircuit/${id}`);
         setData(res.data);
       } catch (err) {
         console.error("Error fetching data:", err);
@@ -29,7 +29,7 @@ const ViewCircuit = () => {
   // Function to fetch PDF and open in new tab
   const openPdf = async () => {
     try {
-      const response = await axios.get(`/api/download/${id}`, {
+      const response = await axios.get(`/mimir/api/download/${id}`, {
         responseType: "arraybuffer",
       });
       const fileURL = URL.createObjectURL(

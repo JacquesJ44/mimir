@@ -29,7 +29,7 @@ const Commissions = () => {
 
   const fetchCommissions = async () => {
     try {
-      const res = await axios.get("/api/commissions");
+      const res = await axios.get("/mimir/api/commissions");
       setCommissions(res.data);
       // console.log("Fetched commissions:", res.data);
     } catch (err) {
@@ -72,7 +72,7 @@ const Commissions = () => {
     try {
       setApplyButtonLoading(true);
       const res = await axios.post(
-        "/api/commissions/apply",
+        "/mimir/api/commissions/apply",
         {
           commission_id: commissionId,
           commission_percentage,
