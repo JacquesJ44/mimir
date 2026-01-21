@@ -56,7 +56,7 @@ const Navbar = ({ token, setToken, message, setMessage }) => {
     const getLinksByRole = (role) => {
       switch (role) {
         case "technician":
-          return ["Circuits", "Sites"];
+          return ["Circuits", "Sites", "Commission"];
         case "finance":
           return ["Dashboard", "Commission"];
         case "sales":
