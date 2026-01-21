@@ -78,14 +78,16 @@ POSITIVE_GIFS = [
     "https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExbmFxbmU4eG1uNHM3MGVycXl5bjZwMDc5NW90bGY3dmhpbTBndDl1ayZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/a0h7sAqON67nO/giphy.gif",
     "https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExdDhpcHNnbjRveHI3b25vamtzaTJkNGcyNjNuOWRkdm1ubjNzNGFxeiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/pa37AAGzKXoek/giphy.gif",
     "https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExM2kya2lsMmVrN3BmcGdibXA4cGNkNmczN3htMmJzeTZzOTdzbGhmaSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Z2VgDwy1IjJUQ/giphy.gif",
+    "https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHdtb20zd2Fwazl0bm5pZnhjeDM1MDd3ZHE1emRnd2xiemVtZDQ5bCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/QLNdAWrPIqkeNZfgcU/giphy.gif"
 ]
 
 NEGATIVE_GIFS = [
     "https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExc3ZwNWFhcTh4azBnOWc4ejBrM2Q1M25oODNlNHhzaWNvNHIyY2lmNSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/a2fVCj2CudIiY/giphy.gif",
     "https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExMWx6ZjYyMmVid3FuOWYyZTFpM2t3dmg0MzgxaHJubGdlcHc4ZDl1eiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/EtB1yylKGGAUg/giphy.gif",
     "https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExbmgzMWd5Y3N2bGhnNjQyMjBjOHF5ZTN5M2xpMzZ6NWN4ZW5kMnZhdSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/CJxXHfRAYvtqU/giphy.gif",
-    "https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExaGZ4d2J1ZnJlY2d3dDNvd2hldm5lN3VxaDV5cjZ6OTVxZmphMTJhcSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/aKAyzum9Xe0mGFjc9m/giphy.gif"
-    "https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExZTJsOTRpcXU2YmpvZjZqMGR4cmFnbnVnazU2bDF0aHozenVmNHFoMiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/STfLOU6iRBRunMciZv/giphy.gif"
+    "https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExaGZ4d2J1ZnJlY2d3dDNvd2hldm5lN3VxaDV5cjZ6OTVxZmphMTJhcSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/aKAyzum9Xe0mGFjc9m/giphy.gif",
+    "https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExZTJsOTRpcXU2YmpvZjZqMGR4cmFnbnVnazU2bDF0aHozenVmNHFoMiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/STfLOU6iRBRunMciZv/giphy.gif",
+    "https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExeWQ0NnlmMWthNGl0amhydnFiejlmd2Rxa282ZTR6emR2a3BnM2syYyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/GjR6RPcURgiL6/giphy.gif",
 ]
 
 # USER BASED ROLES ARE DEFINED AS FOLLOWS:
@@ -787,15 +789,31 @@ def view_logs():
     
 @app.route('/api/commissions', methods=['GET'])
 @jwt_required()
-@role_required(['admin', 'sales', 'technician', 'finance'])
+@role_required(['admin', 'sales', 'finance', 'technician'])
 def get_commissions():
     try:
-        rows = db.get_all_commissions()
-        return jsonify(rows)
+        claims = get_jwt()
+        user_id = claims.get("sub")
+        role = claims.get("role")
+
+        # print("GET_COMMISSIONS ROUTE HIT ✅")
+        # print("User claims:")
+        # pprint(claims)
+        # print(f"User ID: {user_id}, Role: {role}")
+
+        if role in ('admin', 'finance'):
+            rows = db.get_all_commissions()
+        elif role in ('sales', 'technician'):
+            rows = db.get_commissions_for_salesperson(user_id)
+            # pprint(rows)
+        else:
+            # technicians or others see nothing by default
+            rows = []
+
+        return jsonify(rows), 200
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-from flask import render_template
 
 @app.route("/api/commissions/apply", methods=["POST"])
 @jwt_required()
@@ -841,7 +859,7 @@ def apply_commission():
 
         # Create approval token
         token = secrets.token_urlsafe(32)
-        expires_at = datetime.utcnow() + timedelta(days=7)
+        expires_at = datetime.utcnow() + timedelta(minutes=122)
 
         db.create_commission_approval_token(
             commission_id=commission_id,
@@ -906,6 +924,8 @@ def approve_commission():
     commission = db.get_commission_by_id(token_row["commission_id"])
     if not commission:
         return "Commission not found", 404
+    
+    pprint(commission)
 
     if commission["status"] != "pending":
         return (
@@ -913,7 +933,8 @@ def approve_commission():
             "This request can no longer be processed."
         ), 400
     
-    if commission["approval_expires_at"] < datetime.utcnow():
+    # This is a second safety check for expiry - redundant but important
+    if commission["expires_at"] < datetime.utcnow():
         db.reset_commission(commission["id"])
         return "Approval link expired. Commission reset.", 410
 

@@ -627,12 +627,14 @@ class DbUtil:
                         cir.siteA,
                         siteA.site AS siteA_name,
                         cir.siteB,
-                        siteB.site AS siteB_name
+                        siteB.site AS siteB_name,
+                        cat.expires_at
                     FROM commissions c
                     LEFT JOIN users u ON c.salesperson_id = u.id
                     LEFT JOIN circuits cir ON c.circuit_id = cir.id
                     LEFT JOIN sites siteA ON cir.siteA = siteA.id
                     LEFT JOIN sites siteB ON cir.siteB = siteB.id
+                    LEFT JOIN commission_approval_tokens cat ON cat.commission_id = c.id
                     WHERE c.id = %s
                 """, (commission_id,))
                 commission = cursor.fetchone()
@@ -679,6 +681,102 @@ class DbUtil:
         except Exception as e:
             print(f"Error resetting commission {commission_id}:", e)
             raise
+
+    
+    def reset_expired_pending_commissions(self):
+        """
+        Reset commissions stuck in 'pending' where the approval token expired
+        without approval or rejection.
+        """
+        try:
+            conn = self.get_connection()
+            with conn.cursor(pymysql.cursors.DictCursor) as c:
+
+                # 1️⃣ Find pending commissions with expired, unused tokens
+                c.execute("""
+                    SELECT DISTINCT c.id AS commission_id
+                    FROM commissions c
+                    INNER JOIN commission_approval_tokens t
+                        ON t.commission_id = c.id
+                    WHERE c.status = 'pending'
+                    AND t.expires_at < NOW()
+                    AND t.used_at IS NULL
+                """)
+                rows = c.fetchall()
+
+                if not rows:
+                    conn.close()
+                    return 0
+
+                commission_ids = [row["commission_id"] for row in rows]
+
+                # 2️⃣ Reset commissions to 'new'
+                c.execute(f"""
+                    UPDATE commissions
+                    SET status = 'new',
+                        updated_at = NOW()
+                    WHERE id IN ({','.join(['%s'] * len(commission_ids))})
+                """, commission_ids)
+
+                # 3️⃣ Mark tokens as used (expired without action)
+                c.execute(f"""
+                    UPDATE commission_approval_tokens
+                    SET used_at = NOW()
+                    WHERE commission_id IN ({','.join(['%s'] * len(commission_ids))})
+                    AND used_at IS NULL
+                """, commission_ids)
+
+            conn.commit()
+            conn.close()
+            return len(commission_ids)
+
+        except Exception as e:
+            print("Error resetting expired pending commissions:", e)
+            return 0
+        
+    def get_commissions_for_salesperson(self, salesperson_id):
+        try:
+            conn = self.get_connection()
+            with conn.cursor(pymysql.cursors.DictCursor) as c:
+                c.execute("""
+                    SELECT 
+                        c.id,
+                        c.circuit_id,
+                        c.salesperson_id,
+                        CONCAT(u.name, ' ', u.surname) AS salesperson_name,
+                        cir.circuitNumber,
+                        cir.vendor,
+                        cir.contractTerm,
+                        cir.mrc,
+                        cir.sellingPrice,
+                        siteA.site AS siteA_name,
+                        siteB.site AS siteB_name,
+                        c.commission_percentage,
+                        c.start_date,
+                        c.end_date,
+                        c.status,
+                        c.notes,
+                        c.created_at,
+                        c.updated_at
+                    FROM commissions c
+                    LEFT JOIN users u ON c.salesperson_id = u.id
+                    LEFT JOIN circuits cir ON c.circuit_id = cir.id
+                    LEFT JOIN sites siteA ON cir.siteA = siteA.id
+                    LEFT JOIN sites siteB ON cir.siteB = siteB.id
+                    WHERE c.salesperson_id = %s
+                    ORDER BY c.created_at DESC
+                """, (salesperson_id,))
+
+                rows = c.fetchall()
+
+            conn.close()
+            return rows
+
+        except Exception as e:
+            print("Error fetching salesperson commissions:", e)
+            return []
+
+
 
     #=============================================================================================================================================
     # APPROVAL TOKENSS
