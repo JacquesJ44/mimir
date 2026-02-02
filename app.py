@@ -885,7 +885,7 @@ def apply_commission():
         msg = Message(
             subject=f"Commission Approval Request - ID {commission_id}",
             sender=os.getenv("MAIL_DEFAULT_SENDER"),
-            recipients=[os.getenv("RECIPIENT_EMAIL")],
+            recipients=[email.strip() for email in os.getenv("RECIPIENT_EMAIL").split(",")],
             html=render_template(
                 "commission_approval.html",
                 salesperson_name=commission["salesperson_name"],
@@ -925,7 +925,7 @@ def approve_commission():
     if not commission:
         return "Commission not found", 404
     
-    pprint(commission)
+    # pprint(commission)
 
     if commission["status"] != "pending":
         return (
@@ -957,6 +957,144 @@ def approve_commission():
         message=message,
         gif_url=gif_url
     )
+
+#====================================================================================================================================================
+# On the Commissions.jsx component there are 4 views. These are the endpoints for these views.
+#====================================================================================================================================================
+
+# 1. Earnings Summary View
+# Called when the Earned tab is clicked. Each row is a commission earned for the month, with an 'Action' button where certain actions can be performed.
+# Pay, Pause, Reverse, Cancel.
+
+@app.route("/api/commissions/earnings_summary", methods=["GET"])
+@jwt_required()
+@role_required(['admin', 'sales', 'finance', 'technician'])
+def commissions_earnings_summary():
+    try:
+        claims = get_jwt()
+        user_id = claims.get("sub")
+        role = claims.get("role")
+
+        if role in ('admin', 'finance'):
+            summary = db.get_commissions_earnings_summary()
+        elif role in ('sales', 'technician'):
+            summary = db.get_commissions_earnings_summary(user_id=user_id)
+        else:
+            summary = []
+
+        # print("Earnings summary:")
+        # pprint(summary)
+
+        return jsonify(summary), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+    
+# Called to pay selected commissions, changing the status of the earned entries to 'paid'
+@app.route("/api/commissions/pay", methods=["POST"])
+@jwt_required()
+@role_required(["admin", "finance"])
+def pay_commissions():
+    data = request.get_json()
+
+    user_id = data.get("user_id")
+    earned_ids = data.get("earned_ledger_ids", [])
+    payment_date = date.fromisoformat(
+        data.get("payment_date", date.today().isoformat())
+    )
+    notes = data.get("notes")
+
+    if not user_id or not earned_ids:
+        return jsonify({
+            "status": "error",
+            "message": "user_id and earned_ledger_ids are required"
+        }), 400
+
+    paid_count = 0
+    failed = []
+
+    try:
+        for ledger_id in earned_ids:
+            success = db.create_commission_payment_entry(
+                earned_ledger_id=ledger_id,
+                payment_date=payment_date,
+                notes=notes
+            )
+
+            if success:
+                paid_count += 1
+            else:
+                failed.append(ledger_id)
+
+        if not failed:
+            return jsonify({
+                "status": "success",
+                "paid_entries": paid_count,
+                "failed_entries": failed,
+                "message": f"Paid {paid_count} commission(s) successfully."
+            }), 200
+
+        return jsonify({
+            "status": "partial",
+            "paid_entries": paid_count,
+            "failed_entries": failed,
+            "message": f"Paid {paid_count} commission(s). Failed: {failed}"
+        }), 207
+
+    except Exception as e:
+        # Log server error
+        print("Payment error:", e)
+
+        return jsonify({
+            "status": "error",
+            "paid_entries": paid_count,
+            "failed_entries": failed,
+            "message": str(e)
+        }), 400
+    
+# 2. Pay Commissions View
+@app.route("/api/commissions/payout_summary", methods=["GET"])
+@jwt_required()
+@role_required(['admin', 'sales', 'finance', 'technician'])
+def commissions_paid_summary():
+    try:
+        claims = get_jwt()
+        user_id = claims.get("sub")
+        role = claims.get("role")
+
+        if role in ('admin', 'finance'):
+            summary = db.get_commissions_paid_summary()
+        elif role in ('sales', 'technician'):
+            summary = db.get_commissions_paid_summary(user_id=user_id)
+        else:
+            summary = []
+
+        # print("Payout summary:")
+        # pprint(summary)
+
+        return jsonify(summary), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    
+# @app.route("/commissions/pay_all", methods=["POST"])
+# @jwt_required()
+# @role_required(['admin', 'finance'])
+# def pay_all_commissions():
+#     data = request.json
+#     user_id = data.get("user_id")
+#     pay_date = data.get("pay_date")
+
+#     if not user_id or not pay_date:
+#         return {"status": "error", "message": "user_id and pay_date required"}, 400
+
+#     result = db.pay_all_pending_for_user(user_id, pay_date)
+
+#     return result
+
+
 
 # Serve React frontend
 @app.route("/", defaults={"path": ""})

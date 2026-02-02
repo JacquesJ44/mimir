@@ -405,10 +405,10 @@ const exportToPDF = () => {
                   <th>Selling Price</th>
                   <th>GP</th>
                   <th>GP %</th>
-                  <th>Sales Person</th>
-                  <th>Commission %</th>
-                  <th>Commission Value</th>
-                  <th>GP After Commission</th>
+                  {/* <th>Sales Person</th> */}
+                  {/* <th>Commission %</th> */}
+                  {/* <th>Commission Value</th> */}
+                  {/* <th>GP After Commission</th> */}
                 </tr>
               </thead>
               <tbody>
@@ -439,10 +439,10 @@ const exportToPDF = () => {
                       <td>{isClient && c.sellingPrice !== null ? `R${c.sellingPrice}` : 'N/A'}</td>
                       <td>{isClient && gp !== null ? `R${gp}` : 'N/A'}</td>
                       <td>{isClient && markup !== null ? `${markup}%` : 'N/A'}</td>
-                      <td>{isClient ? c.salesPerson || 'N/A' : 'N/A'}</td>
-                      <td>{isClient && c.commission !== null ? `${c.commission}%` : 'N/A'}</td>
-                      <td>{isClient && commissionValue !== null ? `R${commissionValue}` : 'N/A'}</td>
-                      <td>{isClient && gpAfterCommission !== null ? `R${gpAfterCommission}` : 'N/A'}</td>
+                      {/* <td>{isClient ? c.salesPerson || 'N/A' : 'N/A'}</td> */}
+                      {/* <td>{isClient && c.commission !== null ? `${c.commission}%` : 'N/A'}</td> */}
+                      {/* <td>{isClient && commissionValue !== null ? `R${commissionValue}` : 'N/A'}</td> */}
+                      {/* <td>{isClient && gpAfterCommission !== null ? `R${gpAfterCommission}` : 'N/A'}</td> */}
                     </tr>
                   );
                 })}
@@ -495,8 +495,8 @@ const exportToPDF = () => {
                       return `${totalMarkup.toFixed(1)}%`;
                     })()}
                   </td>
-                  <td>R{calculateTotalCommission().toFixed(2)}</td>
-                  <td>R{calculateTotalGpAfterCommission().toFixed(2)}</td>
+                  {/* <td>R{calculateTotalCommission().toFixed(2)}</td> */}
+                  {/* <td>R{calculateTotalGpAfterCommission().toFixed(2)}</td> */}
                 </tr>
 
                 {/* Total - Internal */}

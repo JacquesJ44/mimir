@@ -1,7 +1,9 @@
 import pymysql
-from datetime import datetime
+from datetime import date, datetime
 from flask import request
 from decimal import Decimal
+
+from utils import month_bounds, overlap_days
 
 class DbUtil:
     def __init__(self, config):
@@ -779,7 +781,7 @@ class DbUtil:
 
 
     #=============================================================================================================================================
-    # APPROVAL TOKENSS
+    # APPROVAL TOKENS
     #=============================================================================================================================================
 
     def create_commission_approval_token(self, commission_id, token, expires_at):
@@ -818,5 +820,610 @@ class DbUtil:
         conn.commit()
         conn.close()
 
+#=============================================================================================================================================
+# COMMISSION LEDGER ENTRIES
+#=============================================================================================================================================
+    
+    # This function is called in batch_commissions.py to create monthly commission ledger entries
+    def create_monthly_commission_ledger_entry(self, commission_id: int, year: int, month: int) -> bool:
+        try:
+            conn = self.get_connection()
+            with conn.cursor(pymysql.cursors.DictCursor) as c:
 
- 
+                # Month bounds
+                period_start, period_end, days_in_month = month_bounds(year, month)
+
+                # Idempotency check
+                c.execute("""
+                    SELECT 1
+                    FROM commission_ledger
+                    WHERE commission_id = %s
+                    AND entry_type = 'earned'
+                    AND period_start = %s
+                    AND period_end = %s
+                    LIMIT 1
+                """, (commission_id, period_start, period_end))
+
+                if c.fetchone():
+                    return True  # Already processed
+
+                # Fetch commission + circuit
+                c.execute("""
+                    SELECT
+                        c.id AS commission_id,
+                        c.salesperson_id,
+                        c.commission_percentage,
+                        c.start_date,
+                        c.end_date,
+                        cir.mrc,
+                        cir.sellingPrice
+                    FROM commissions c
+                    JOIN circuits cir ON c.circuit_id = cir.id
+                    WHERE c.id = %s
+                    AND c.status = 'active'
+                """, (commission_id,))
+
+                row = c.fetchone()
+                if not row:
+                    return False
+
+                # Determine overlap
+                commission_start = row["start_date"]
+                commission_end = row["end_date"] or period_end
+
+                active_days = overlap_days(
+                    commission_start,
+                    commission_end,
+                    period_start,
+                    period_end
+                )
+
+                if active_days == 0:
+                    return True  # No accrual for this month
+
+                # Calculations
+                monthly_gp = Decimal(row["sellingPrice"]) - Decimal(row["mrc"])
+
+                prorated_gp = (
+                    monthly_gp *
+                    Decimal(active_days) /
+                    Decimal(days_in_month)
+                )
+
+                commission_value = (
+                    prorated_gp *
+                    (Decimal(row["commission_percentage"]) / Decimal("100"))
+                ).quantize(Decimal("0.01"))
+
+                # Insert ledger row
+                c.execute("""
+                    INSERT INTO commission_ledger (
+                        commission_id,
+                        user_id,
+                        period_start,
+                        period_end,
+                        gp,
+                        commission_percentage,
+                        active_days,
+                        days_in_month,
+                        commission_value,
+                        entry_type,
+                        status,
+                        effective_date
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, 'earned', 'pending', %s
+                    )
+                """, (
+                    commission_id,
+                    row["salesperson_id"],
+                    period_start,
+                    period_end,
+                    monthly_gp,
+                    row["commission_percentage"],
+                    active_days,
+                    days_in_month,
+                    commission_value,
+                    period_end
+                ))
+
+            conn.commit()
+            conn.close()
+            return True
+        
+        except pymysql.err.IntegrityError as e:
+            # Duplicate entry - already processed for this commission + month
+            return True
+
+        except Exception as e:
+            print("Commission accrual error:", e)
+            return False
+        
+    # Called in /api/commissions/earnings_summary
+    def get_commissions_earnings_summary(self, user_id=None):
+        """
+        Query the commission_ledger table and return earnings summary.
+        If user_id is provided, filter by that user.
+        """
+        try:
+            conn = self.get_connection()
+            with conn.cursor(pymysql.cursors.DictCursor) as c:
+                if user_id:
+                    sql = """
+                        SELECT 
+                            cl.id,
+                            cl.commission_id,
+                            cl.user_id,
+                            u.name AS user_name,
+                            u.surname AS user_surname,
+                            c.circuitNumber,
+                            s.site AS client_name,          
+                            cl.period_start,
+                            cl.period_end,
+                            cl.gp,
+                            cl.commission_percentage,
+                            cl.active_days,
+                            cl.days_in_month,
+                            cl.commission_value,
+                            cl.created_at,
+                            cl.entry_type,
+                            cl.status,
+                            CASE
+                                WHEN EXISTS (
+                                    SELECT 1
+                                    FROM commission_ledger p
+                                    WHERE p.entry_type = 'payment'
+                                    AND p.reference_ledger_id = cl.id
+                                    AND p.status = 'paid'
+                                )
+                                THEN 'paid'
+                                ELSE cl.status
+                            END AS effective_status,
+                            cl.effective_date,
+                            cl.notes
+                        FROM commission_ledger cl
+                        LEFT JOIN users u
+                            ON cl.user_id = u.id
+                        LEFT JOIN commissions cm
+                            ON cl.commission_id = cm.id
+                        LEFT JOIN circuits c
+                            ON cm.circuit_id = c.id
+                        LEFT JOIN sites s
+                            ON c.siteB = s.id
+                        WHERE cl.user_id = %s
+                        AND cl.entry_type = 'earned'
+                        ORDER BY cl.period_start DESC;
+                    """
+                    c.execute(sql, (user_id,))
+                else:
+                    sql = """
+                            SELECT 
+                                cl.id,
+                                cl.commission_id,
+                                cl.user_id,
+                                u.name AS user_name,
+                                u.surname AS user_surname,
+                                c.circuitNumber,
+                                s.site AS client_name,    
+                                cl.period_start,
+                                cl.period_end,
+                                cl.gp,
+                                cl.commission_percentage,
+                                cl.active_days,
+                                cl.days_in_month,
+                                cl.commission_value,
+                                cl.created_at,
+                                cl.entry_type,
+                                cl.status,
+
+                                /* ✅ Effective status override */
+                                CASE
+                                    WHEN EXISTS (
+                                        SELECT 1
+                                        FROM commission_ledger p
+                                        WHERE p.entry_type = 'payment'
+                                        AND p.reference_ledger_id = cl.id
+                                        AND p.status = 'paid'
+                                    )
+                                    THEN 'paid'
+                                    ELSE cl.status
+                                END AS effective_status,
+
+                                cl.effective_date,
+                                cl.notes
+
+                            FROM commission_ledger cl
+                            LEFT JOIN users u
+                                ON cl.user_id = u.id
+                            LEFT JOIN commissions cm
+                                ON cl.commission_id = cm.id
+                            LEFT JOIN circuits c
+                                ON cm.circuit_id = c.id
+                            LEFT JOIN sites s
+                                ON c.siteB = s.id
+
+                            WHERE cl.entry_type = 'earned'
+                            ORDER BY cl.period_start DESC;
+                        """
+
+                    c.execute(sql)
+
+                rows = c.fetchall()
+
+                # Normalize types
+                summary = []
+                for row in rows:
+                    summary.append({
+                        "id": row["id"],
+                        "commission_id": row["commission_id"],
+                        "user_id": row["user_id"],
+                        "user_name": row.get("user_name"),
+                        "user_surname": row.get("user_surname"),
+                        "circuit_number": row.get("circuitNumber"),
+                        "client_name": row.get("client_name"),
+                        "period_start": str(row["period_start"]),
+                        "period_end": str(row["period_end"]),
+                        "gp": float(row["gp"]),
+                        "commission_percentage": float(row["commission_percentage"]),
+                        "active_days": row["active_days"],
+                        "days_in_month": row["days_in_month"],
+                        "commission_value": float(row["commission_value"]),
+                        "created_at": str(row["created_at"]),
+                        "entry_type": row["entry_type"],
+                        "raw_status": row["status"],
+                        "effective_status": row["effective_status"],
+                        "effective_date": str(row["effective_date"]),
+                        "notes": row["notes"],
+                    })
+
+                return summary
+
+        except Exception as e:
+            raise RuntimeError(f"Database error: {e}")
+
+
+    # Called in /api/commissions/pay    
+    def create_commission_payment_entry(self, earned_ledger_id: int, payment_date: date, notes: str = None) -> bool:
+        try:
+            conn = self.get_connection()
+            with conn.cursor(pymysql.cursors.DictCursor) as c:
+
+                # Fetch earned ledger row
+                c.execute("""
+                    SELECT *
+                    FROM commission_ledger
+                    WHERE id = %s
+                    AND entry_type = 'earned'
+                    AND status IN ('pending', 'approved')
+                """, (earned_ledger_id,))
+
+                earned = c.fetchone()
+                if not earned:
+                    raise ValueError("Earned commission entry not found or not payable")
+
+                # Guard: prevent double payment
+                c.execute("""
+                    SELECT 1
+                    FROM commission_ledger
+                    WHERE entry_type = 'payment'
+                    AND reference_ledger_id = %s
+                    LIMIT 1
+                """, (earned_ledger_id,))
+
+                if c.fetchone():
+                    raise ValueError("Commission already paid")
+
+                # Insert payment ledger entry
+                c.execute("""
+                    INSERT INTO commission_ledger (
+                        commission_id,
+                        user_id,
+                        period_start,
+                        period_end,
+                        gp,
+                        commission_percentage,
+                        active_days,
+                        days_in_month,
+                        commission_value,
+                        entry_type,
+                        status,
+                        effective_date,
+                        reference_ledger_id,
+                        notes
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        'payment', 'paid', %s, %s, %s
+                    )
+                """, (
+                    earned["commission_id"],
+                    earned["user_id"],
+                    earned["period_start"],
+                    earned["period_end"],
+                    earned["gp"],
+                    earned["commission_percentage"],
+                    earned["active_days"],
+                    earned["days_in_month"],
+                    earned["commission_value"],
+                    payment_date,
+                    earned["id"],
+                    notes
+                ))
+
+            conn.commit()
+            conn.close()
+            return True
+
+        except Exception as e:
+            print("Payment entry error:", e)
+            return False
+
+    def get_commissions_paid_summary(self, user_id=None):
+        """
+        Return all PAID commission ledger entries.
+        If user_id is provided, filter by that user.
+        """
+        try:
+            conn = self.get_connection()
+            with conn.cursor(pymysql.cursors.DictCursor) as c:
+
+                if user_id:
+                    sql = """
+                        SELECT 
+                            cl.id,
+                            cl.commission_id,
+                            cl.user_id,
+                            u.name AS user_name,
+                            u.surname AS user_surname,
+                            c.circuitNumber,
+                            s.site AS client_name,
+                            cl.period_start,
+                            cl.period_end,
+                            cl.gp,
+                            cl.commission_percentage,
+                            cl.active_days,
+                            cl.days_in_month,
+                            cl.commission_value,
+                            cl.created_at,
+                            cl.entry_type,
+                            cl.status,
+                            cl.effective_date,
+                            cl.notes,
+                            cl.reference_ledger_id
+                        FROM commission_ledger cl
+                        LEFT JOIN users u
+                            ON cl.user_id = u.id
+                        LEFT JOIN commissions cm
+                            ON cl.commission_id = cm.id
+                        LEFT JOIN circuits c
+                            ON cm.circuit_id = c.id
+                        LEFT JOIN sites s
+                            ON c.siteB = s.id
+                        WHERE cl.status = 'paid'
+                        AND cl.user_id = %s
+                        ORDER BY cl.effective_date DESC;
+
+                    """
+                    c.execute(sql, (user_id,))
+                else:
+                    sql = """
+                        SELECT 
+                            cl.id,
+                            cl.commission_id,
+                            cl.user_id,
+                            u.name AS user_name,
+                            u.surname AS user_surname,
+                            c.circuitNumber,
+                            s.site AS client_name,
+                            cl.period_start,
+                            cl.period_end,
+                            cl.gp,
+                            cl.commission_percentage,
+                            cl.active_days,
+                            cl.days_in_month,
+                            cl.commission_value,
+                            cl.created_at,
+                            cl.entry_type,
+                            cl.status,
+                            cl.effective_date,
+                            cl.notes,
+                            cl.reference_ledger_id
+                        FROM commission_ledger cl
+                        LEFT JOIN users u
+                            ON cl.user_id = u.id
+                        LEFT JOIN commissions cm
+                            ON cl.commission_id = cm.id
+                        LEFT JOIN circuits c
+                            ON cm.circuit_id = c.id
+                        LEFT JOIN sites s
+                            ON c.siteB = s.id
+                        WHERE cl.status = 'paid'
+                        ORDER BY cl.effective_date DESC;
+                    """
+                    c.execute(sql)
+
+                rows = c.fetchall()
+
+                summary = []
+                for row in rows:
+                    summary.append({
+                        "id": row["id"],
+                        "commission_id": row["commission_id"],
+                        "user_id": row["user_id"],
+                        "user_name": row.get("user_name"),
+                        "user_surname": row.get("user_surname"),
+                        "circuit_number": row.get("circuitNumber"),
+                        "client_name": row.get("client_name"),
+                        "period_start": str(row["period_start"]) if row["period_start"] else None,
+                        "period_end": str(row["period_end"]) if row["period_end"] else None,
+                        "gp": float(row["gp"]) if row["gp"] is not None else None,
+                        "commission_percentage": float(row["commission_percentage"]) if row["commission_percentage"] is not None else None,
+                        "active_days": row["active_days"],
+                        "days_in_month": row["days_in_month"],
+                        "commission_value": float(row["commission_value"]),
+                        "created_at": str(row["created_at"]),
+                        "entry_type": row["entry_type"],
+                        "status": row["status"],
+                        "effective_date": str(row["effective_date"]),
+                        "notes": row["notes"],
+                        "reference_ledger_id": row["reference_ledger_id"],
+                    })
+
+                return summary
+
+        except Exception as e:
+            raise RuntimeError(f"Database error: {e}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+    # def get_commission_balance(self, commission_id: int):
+    #     conn = self.get_connection()
+    #     with conn.cursor(pymysql.cursors.DictCursor) as c:
+
+    #         c.execute("""
+    #             SELECT
+    #                 IFNULL(SUM(CASE WHEN entry_type='earned' THEN commission_value END), 0) AS earned,
+    #                 IFNULL(SUM(CASE WHEN entry_type='payment' THEN commission_value END), 0) AS paid
+    #             FROM commission_ledger
+    #             WHERE commission_id = %s
+    #         """, (commission_id,))
+
+    #         row = c.fetchone()
+
+    #     conn.close()
+    #     return {
+    #         "earned": Decimal(row["earned"]),
+    #         "paid": Decimal(row["paid"]),
+    #         "outstanding": Decimal(row["earned"]) - Decimal(row["paid"])
+    #     }
+
+    # def get_user_commission_balance(self, user_id: int):
+    #     conn = self.get_connection()
+    #     with conn.cursor(pymysql.cursors.DictCursor) as c:
+    #         c.execute("""
+    #             SELECT
+    #                 IFNULL(SUM(CASE WHEN entry_type='earned' THEN commission_value END), 0) AS earned,
+    #                 IFNULL(SUM(CASE WHEN entry_type='payment' THEN commission_value END), 0) AS paid
+    #             FROM commission_ledger
+    #             WHERE user_id = %s
+    #         """, (user_id,))
+
+    #         row = c.fetchone()
+
+    #     conn.close()
+    #     return {
+    #         "earned": Decimal(row["earned"]),
+    #         "paid": Decimal(row["paid"]),
+    #         "outstanding": Decimal(row["earned"]) - Decimal(row["paid"])
+    #     }
+
+    # def create_user_payment_entry(self, user_id: int, amount: Decimal, payment_date: date, payment_method: str, payment_reference: str = None, notes: str = None):
+    #     try:
+    #         conn = self.get_connection()
+    #         with conn.cursor(pymysql.cursors.DictCursor) as c:
+
+    #             c.execute("""
+    #                 INSERT INTO commission_ledger (
+    #                     user_id,
+    #                     commission_id,
+    #                     period_start,
+    #                     period_end,
+    #                     commission_value,
+    #                     entry_type,
+    #                     status,
+    #                     effective_date,
+    #                     notes
+    #                 ) VALUES (
+    #                     %s, NULL, NULL, NULL, %s, 'payment', 'paid', %s, %s
+    #                 )
+    #             """, (
+    #                 user_id,
+    #                 amount,
+    #                 payment_date,
+    #                 notes
+    #             ))
+
+    #         conn.commit()
+    #         conn.close()
+    #         return True
+
+    #     except Exception as e:
+    #         print("Payment entry error:", e)
+    #         return False
+
+    # def pay_all_pending_for_user(self, user_id, pay_date, notes=None):
+    #     """
+    #     Pay all pending earned commission ledger entries for a given user.
+    #     This creates a payment ledger row and marks the earned entries as paid.
+    #     """
+
+    #     conn = self.get_connection()
+
+    #     try:
+    #         with conn.cursor(pymysql.cursors.DictCursor) as c:
+
+    #             # 1) Get total pending amount for user
+    #             c.execute("""
+    #                 SELECT SUM(commission_value) AS total_pending
+    #                 FROM commission_ledger
+    #                 WHERE user_id = %s
+    #                 AND entry_type = 'earned'
+    #                 AND status = 'pending'
+    #             """, (user_id,))
+
+    #             row = c.fetchone()
+    #             total_pending = row["total_pending"] or 0
+
+    #             if total_pending == 0:
+    #                 return {"status": "nothing_to_pay", "amount": 0}
+
+    #             # 2) Insert payment row
+    #             c.execute("""
+    #                 INSERT INTO commission_ledger (
+    #                     commission_id,
+    #                     user_id,
+    #                     period_start,
+    #                     period_end,
+    #                     gp,
+    #                     commission_percentage,
+    #                     active_days,
+    #                     days_in_month,
+    #                     commission_value,
+    #                     entry_type,
+    #                     status,
+    #                     effective_date,
+    #                     notes
+    #                 ) VALUES (
+    #                     NULL, %s, NULL, NULL, NULL, NULL, NULL, NULL, %s,
+    #                     'payment', 'paid', %s, %s
+    #                 )
+    #             """, (
+    #                 user_id,
+    #                 total_pending,
+    #                 pay_date,
+    #                 notes
+    #             ))
+
+    #             # 3) Mark earned entries as paid
+    #             c.execute("""
+    #                 UPDATE commission_ledger
+    #                 SET status = 'paid'
+    #                 WHERE user_id = %s
+    #                 AND entry_type = 'earned'
+    #                 AND status = 'pending'
+    #             """, (user_id,))
+
+    #         conn.commit()
+
+    #         return {"status": "paid", "amount": float(total_pending)}
+
+    #     finally:
+    #         conn.close()
