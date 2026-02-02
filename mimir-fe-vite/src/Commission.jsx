@@ -129,7 +129,7 @@ const Commissions = () => {
   const [earnings, setEarnings] = useState([]);
   const fetchEarningsSummary = async () => {
     try {
-      const res = await axios.get("/api/commissions/earnings_summary");
+      const res = await axios.get("/mimir/api/commissions/earnings_summary");
       setEarnings(res.data);
       // console.log("Fetched earnings summary:", res.data);
     } catch (err) {
@@ -141,7 +141,7 @@ const Commissions = () => {
   const [payouts, setPayouts] = useState([]);
   const fetchPayoutSummary = async () => {
     try {
-      const res = await axios.get("/api/commissions/payout_summary");
+      const res = await axios.get("/mimir/api/commissions/payout_summary");
       setPayouts(res.data);
       // console.log("Fetched payout summary:", res.data);
     } catch (err) {
@@ -151,7 +151,7 @@ const Commissions = () => {
 
   const payCommission = async (ledgerId, userId) => {
     try {
-      const res = await axios.post("/api/commissions/pay", {
+      const res = await axios.post("/mimir/api/commissions/pay", {
         user_id: userId,
         earned_ledger_ids: [ledgerId], // single payout
         payment_date: new Date().toISOString().slice(0, 10),

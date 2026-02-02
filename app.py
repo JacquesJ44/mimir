@@ -966,7 +966,7 @@ def approve_commission():
 # Called when the Earned tab is clicked. Each row is a commission earned for the month, with an 'Action' button where certain actions can be performed.
 # Pay, Pause, Reverse, Cancel.
 
-@app.route("/api/commissions/earnings_summary", methods=["GET"])
+@app.route("/mimir/api/commissions/earnings_summary", methods=["GET"])
 @jwt_required()
 @role_required(['admin', 'sales', 'finance', 'technician'])
 def commissions_earnings_summary():
@@ -992,7 +992,7 @@ def commissions_earnings_summary():
     
     
 # Called to pay selected commissions, changing the status of the earned entries to 'paid'
-@app.route("/api/commissions/pay", methods=["POST"])
+@app.route("/mimir/api/commissions/pay", methods=["POST"])
 @jwt_required()
 @role_required(["admin", "finance"])
 def pay_commissions():
@@ -1054,7 +1054,7 @@ def pay_commissions():
         }), 400
     
 # 2. Pay Commissions View
-@app.route("/api/commissions/payout_summary", methods=["GET"])
+@app.route("/mimir/api/commissions/payout_summary", methods=["GET"])
 @jwt_required()
 @role_required(['admin', 'sales', 'finance', 'technician'])
 def commissions_paid_summary():
