@@ -131,7 +131,7 @@ const Commissions = () => {
     try {
       const res = await axios.get("/mimir/api/commissions/earnings_summary");
       setEarnings(res.data);
-      // console.log("Fetched earnings summary:", res.data);
+      console.log("Fetched earnings summary:", res.data);
     } catch (err) {
       console.error("Error fetching earnings summary", err);
     }
@@ -596,7 +596,7 @@ const Commissions = () => {
                                 >
                                   <li>
                                     <button
-                                      disabled={e.entry_type !== "earned" || e.status !== "pending"}
+                                      disabled={e.entry_type !== "earned" || e.raw_status !== "pending"}
                                       onClick={() => payCommission(e.id, e.user_id)}
                                     >
                                       Pay
