@@ -1081,7 +1081,7 @@ class DbUtil:
             raise RuntimeError(f"Database error: {e}")
 
 
-    # Called in /api/commissions/pay    
+    # Called in /api/commissions/pay - these are manual payments triggered by admin or finance users, not the automated batch payout  
     def create_commission_payment_entry(self, earned_ledger_id: int, payment_date: date, notes: str = None) -> bool:
         try:
             conn = self.get_connection()
@@ -1155,7 +1155,115 @@ class DbUtil:
         except Exception as e:
             print("Payment entry error:", e)
             return False
+        
+    #=============================================================================================================================================
+    # BATCH AUTO PAYOUT SUPPORTING FUNCTIONS
+    #============================================================================================================================================= 
+    def get_unpaid_earned_commissions(self, year, month):
+        conn = self.get_connection()
+        with conn.cursor(pymysql.cursors.DictCursor) as c:
+            c.execute("""
+                SELECT e.id
+                FROM commission_ledger e
+                LEFT JOIN commission_ledger p 
+                ON p.reference_ledger_id = e.id 
+                AND p.entry_type = 'payment'
+                WHERE e.entry_type = 'earned'
+                AND YEAR(e.period_end) = %s
+                AND MONTH(e.period_end) = %s
+                AND p.id IS NULL
+            """, (year, month))
+            return c.fetchall()
+        
+    # This is used in batch_commissions_payout.py to generate the payment entries automatically. This is the opposite of the single, manual payout function above.
+    def create_commission_payment_entry_batch(self, earned_ledger_id: int, payment_date: date, payout_batch_id: str, notes: str = None):
+        """
+        Batch auto payout version of manual payment logic.
+        Mirrors create_commission_payment_entry exactly + batch_id tagging.
+        """
 
+        try:
+            conn = self.get_connection()
+            with conn.cursor(pymysql.cursors.DictCursor) as c:
+
+                # Fetch earned row
+                c.execute("""
+                    SELECT *
+                    FROM commission_ledger
+                    WHERE id = %s
+                    AND entry_type = 'earned'
+                    AND status IN ('pending', 'approved')
+                """, (earned_ledger_id,))
+                earned = c.fetchone()
+
+                if not earned:
+                    raise ValueError(f"Earned entry {earned_ledger_id} not payable")
+
+                # Prevent double payment
+                c.execute("""
+                    SELECT 1
+                    FROM commission_ledger
+                    WHERE entry_type = 'payment'
+                    AND reference_ledger_id = %s
+                    LIMIT 1
+                """, (earned_ledger_id,))
+
+                if c.fetchone():
+                    raise ValueError(f"Already paid: {earned_ledger_id}")
+
+                # Insert payment row
+                c.execute("""
+                    INSERT INTO commission_ledger (
+                        commission_id,
+                        user_id,
+                        period_start,
+                        period_end,
+                        gp,
+                        commission_percentage,
+                        active_days,
+                        days_in_month,
+                        commission_value,
+                        entry_type,
+                        status,
+                        effective_date,
+                        reference_ledger_id,
+                        notes,
+                        payout_batch_id
+                    )
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        'payment', 'paid', %s, %s, %s, %s
+                    )
+                """, (
+                    earned["commission_id"],
+                    earned["user_id"],
+                    earned["period_start"],
+                    earned["period_end"],
+                    earned["gp"],
+                    earned["commission_percentage"],
+                    earned["active_days"],
+                    earned["days_in_month"],
+                    earned["commission_value"],
+                    payment_date,
+                    earned["id"],
+                    notes,
+                    payout_batch_id
+                ))
+
+            conn.commit()
+            return True
+
+        except Exception as e:
+            print("Batch payment error:", e)
+            return False
+
+        finally:
+            conn.close()
+
+    #=============================================================================================================================================
+
+
+    # This returns a summary of all PAID commissions, used in payout summary If user_id is provided, filters by that user.
     def get_commissions_paid_summary(self, user_id=None):
         """
         Return all PAID commission ledger entries.
@@ -1271,11 +1379,53 @@ class DbUtil:
 
         except Exception as e:
             raise RuntimeError(f"Database error: {e}")
+        
+    
+
+    # Automated payout kill switch lookup
+    def get_system_setting_bool(self, key: str) -> bool:
+        conn = self.get_connection()
+        with conn.cursor() as c:
+            c.execute("SELECT setting_value FROM system_settings WHERE setting_key = %s", (key,))
+            row = c.fetchone()
+
+        if not row:
+            return False  # Fail closed
+
+        return row[0].lower() in ("1", "true", "yes", "on")
 
 
+    #=============================================================================================================================================
+    # SYTEM SETTINGS
+    #=============================================================================================================================================
+
+    def get_system_setting(self, key: str):
+        conn = self.get_connection()
+        try:
+            with conn.cursor() as c:
+                c.execute("SELECT setting_value FROM system_settings WHERE setting_key = %s", (key,))
+                row = c.fetchone()
+                # print(f"System setting lookup for '{key}': {row[0] if row else 'not found'}")
+                # print(row)
+                return row[0] if row else None
+        finally:
+            conn.close()
 
 
+    def set_system_setting(self, key: str, value: str):
+        conn = self.get_connection()
+        try:
+            with conn.cursor() as c:
+                c.execute("""
+                    INSERT INTO system_settings (setting_key, setting_value)
+                    VALUES (%s, %s)
+                    ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                """, (key, value))
+            conn.commit()
+        finally:
+            conn.close()
 
+    #=============================================================================================================================================
 
 
 

@@ -7,10 +7,12 @@ from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
 from itsdangerous import URLSafeTimedSerializer
 from datetime import timedelta, datetime, timezone, date
+from dateutil.relativedelta import relativedelta
 from threading import Thread
 from email.mime.text import MIMEText
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from functools import wraps
+from zoneinfo import ZoneInfo
 
 import hashlib
 import random
@@ -23,7 +25,7 @@ import re
 from pprint import pprint
 
 from db import DbUtil
-from utils import describe_changes_log
+from utils import describe_changes_log, CycleManager
 
 # Load variables from .env
 load_dotenv()
@@ -35,17 +37,21 @@ db = DbUtil({
     'db': os.getenv('DB_NAME')
 })
 
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 REACT_BUILD_DIR = os.path.join(BASE_DIR, "mimir-fe-vite", "dist")
 UPLOAD_FOLDER = './docs'
 ALLOWED_EXTENSIONS = set(['pdf'])
 DECIMAL_PATTERN = re.compile(r'^\d+(\.\d{1,2})?$')
+TZ = ZoneInfo("Africa/Johannesburg")  # SAST timezone
 
 app = Flask(
     __name__,
     static_folder=REACT_BUILD_DIR,
     static_url_path=""
 )
+
+cm = CycleManager(TZ)
 
 # Apply CORS immediately after app creation
 CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": "*"}}, allow_headers=["Content-Type", "Authorization"])
@@ -177,8 +183,73 @@ def validate_decimal_field(value, field_name):
     except (InvalidOperation, TypeError, ValueError):
         raise ValueError(f"{field_name} is not a valid decimal")
 
-    # ROUTES
+# These four functions calculate the current month, payout date and accrual date and also keeps everything in SAST timezone. This ensures that the commission processes run at the correct local time regardless of where the server is hosted. The accrual date is set to the 1st of the month at 2am SAST, and the payout date is set to the 20th of the month at 2am SAST.
+# def now_sast():
+#     return datetime.now(TZ)
 
+# def now_sast():
+#     return datetime.now(TZ)
+
+# def payout_this_month():
+#     now = now_sast()
+#     return datetime(now.year, now.month, 16, 11, 8, tzinfo=TZ)
+
+# def accrual_this_month():
+#     now = now_sast()
+#     return datetime(now.year, now.month, 16, 12, 59, tzinfo=TZ)
+
+# def next_payout_date():
+#     now = now_sast()
+
+#     d = payout_this_month()
+#     print("NOW:", now, "PAYOUT DATE:", d)
+#     if now >= d:
+#         d = d + relativedelta(months=1)
+#     print("NEXT PAYOUT DATE:", d)    
+#     return d
+
+# def next_accrual_date():
+#     now = now_sast()
+#     d = accrual_this_month()
+#     # print("NOW:", now, "ACCRUAL DATE:", d)
+#     if now >= d:
+#         d = d + relativedelta(months=1)
+#         # print("NEXT ACCRUAL DATE:", d)
+#     return d
+
+# def get_cycle_dates():
+#     now = now_sast()
+
+#     payout = next_payout_date()
+#     accrual = next_accrual_date()
+
+#     return now, payout, accrual
+
+# def commission_status():
+#     now = now_sast()
+#     payout = payout_this_month()
+#     accrual = accrual_this_month()
+
+#     print(f"NOW: {now}, PAYOUT: {payout}, ACCRUAL: {accrual}")
+
+#     if now < payout:
+#         return "COUNTDOWN"
+#     elif payout <= now < accrual:
+#         return "WAITING_FOR_ACCRUAL"
+#     else:
+#         return "EXECUTED"
+
+
+
+
+
+
+
+
+
+#========================================================================================================================
+    # ROUTES
+#========================================================================================================================
 #Login Route
 @app.route('/mimir/api/login', methods=['POST'])
 def login():
@@ -815,7 +886,56 @@ def get_commissions():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/mimir/api/commissions/apply", methods=["POST"])
+#==============================================================================    
+# COMMISSION AUTO-PAYOUT TIMER & KILL SWITCH ROUTES
+#==============================================================================
+# GET current kill switch state
+@app.route("/api/commissions/kill-switch", methods=["GET"])
+def get_kill_switch():
+    val = db.get_system_setting("commission_auto_pay")
+    enabled = (val == "on")
+    print("Commission auto-pay state:", enabled)
+    return jsonify({"enabled": enabled})
+
+
+# POST to toggle kill switch
+@app.route("/api/commissions/kill-switch", methods=["POST"])
+def set_kill_switch():
+    data = request.get_json()
+    # print(data)
+    if "enabled" not in data:
+        return jsonify({"error": "commission_auto_pay field is required"}), 400
+
+    enabled = (data["enabled"])
+    # print("Kill switch state:", enabled)
+
+    db.set_system_setting(
+        "commission_auto_pay", 
+        "on" if enabled == True or enabled == "true" else "off"
+    )
+
+    return jsonify({"status": "ok", "enabled": enabled})
+
+@app.route("/api/commissions/cycle-status")
+def commissions_status():
+    # Get cycle status dict from CycleManager
+    cycle = cm.commission_status()
+
+    # Kill switch from your system settings
+    kill_switch_enabled = db.get_system_setting("commission_auto_pay") == "on"
+
+    return jsonify({
+        "now": cycle["now"].isoformat(),
+        "next_accrual": cycle["accrual"].isoformat(),
+        "next_payout": cycle["payout"].isoformat(),
+        "phase": cycle["status"],
+        "auto_payout_enabled": kill_switch_enabled
+    })
+
+
+#=======================================================================================================================================
+
+@app.route("/api/commissions/apply", methods=["POST"])
 @jwt_required()
 @role_required(['admin', 'sales', 'technician'])
 def apply_commission():

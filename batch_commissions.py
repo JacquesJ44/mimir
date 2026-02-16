@@ -1,13 +1,18 @@
 
 # This script processes monthly commission accruals for active commissions. It should run once a month via cronjob.
 
-# This should run on the last day of each month to calculate commission earned by salespeople for that month. Once the amoutt is calculated, a ledger entry is created for each commission, with entry type 'earned". It can then be reviewed and paid out manually by the finance team.
+# This should run on the first day of each month to calculate commission earned by salespeople for the previous month. Once the amount is calculated, a ledger entry is created for each commission, with entry type 'earned"
+
+# If run without arguments, it defaults to processing the previous month. You can also provide year and month as arguments.
+# Example usage:
+#   python batch_commissions.py 2024 5
 
 from datetime import date
 import os
 import pymysql
 import calendar
 import sys
+import logging
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -24,6 +29,8 @@ db = DbUtil({
     'db': os.getenv('DB_NAME')
 })
 
+LOG_FILE = 'batch_commissions.log'
+logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format='%(asctime)s %(levelname)s:%(message)s')
 
 def get_target_year_month():
     """
@@ -70,8 +77,7 @@ def run_monthly_commission_accrual(year: int, month: int):
 
         commission_ids = [row['id'] for row in c.fetchall()]
 
-        print(f"Found {len(commission_ids)} active commissions for {year}-{month:02d}")
-        pprint(commission_ids)
+        logging.info(f"Processing {len(commission_ids)} commissions for {year}-{month:02d}, Commission IDs: {commission_ids}")
 
     conn.close()
 

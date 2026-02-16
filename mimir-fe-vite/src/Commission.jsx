@@ -1,5 +1,5 @@
 // src/pages/Commissions.js
-import React, { useEffect, useState, Fragment} from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { jwtDecode } from "jwt-decode";
 import axios from "./AxiosInstance"; 
 import { Loader2 } from "lucide-react";
@@ -24,7 +24,10 @@ const Commissions = () => {
 
   const currentYear = new Date().getFullYear();
 
-  const [commissionLedger, setCommissionLedger] = useState([]);
+  // const [commissionLedger, setCommissionLedger] = useState([]);
+
+  // const [payoutWindowReached, setPayoutWindowReached] = useState(false);
+
 
   // Optional: centralize what views exist so it’s easy to add more later.
   const views = [
@@ -52,10 +55,8 @@ const Commissions = () => {
   };
 
   useEffect(() => {
+    // 1️⃣ Get user role from token
     const token = localStorage.getItem("token");
-
-    // console.log("Retrieved token:", token);
-
     if (token) {
       try {
         const decodedToken = jwtDecode(token);
@@ -64,13 +65,25 @@ const Commissions = () => {
         console.error("Invalid token:", err);
       }
     }
+
+    // 2️⃣ Fetch kill switch state from backend
+    const fetchKillSwitch = async () => {
+      try {
+        const res = await axios.get("/api/commissions/kill-switch", { withCredentials: true });
+        setKillSwitchEnabled(res.data.enabled);
+        // console.log("Commission auto-pay state:", res.data.enabled);
+      } catch (err) {
+        console.error("Failed to fetch kill switch state:", err);
+        setKillSwitchEnabled(false); // fallback default
+      }
+    };
+
+    fetchKillSwitch();
   }, []);
 
 
-  const canFilterBySalesPerson =
-  userRole === "admin" || userRole === "finance";
+  //===========================================================================================================================
 
-//===========================================================================================================================
 
   // Fetch ALL commissions from the API and dislay on Agreements view
   const fetchCommissions = async () => {
@@ -131,7 +144,7 @@ const Commissions = () => {
     try {
       const res = await axios.get("/mimir/api/commissions/earnings_summary");
       setEarnings(res.data);
-      console.log("Fetched earnings summary:", res.data);
+      // console.log("Fetched earnings summary:", res.data);
     } catch (err) {
       console.error("Error fetching earnings summary", err);
     }
@@ -192,6 +205,9 @@ const Commissions = () => {
     }
   };
 
+  const canFilterBySalesPerson =
+  userRole === "admin" || userRole === "finance";
+
   const filterByMonthYearAndSalesperson = (records, dateField) => {
     return records.filter((r) => {
       if (!r[dateField]) return true;
@@ -213,7 +229,165 @@ const Commissions = () => {
     });
   };
 
- 
+  //=====================================================================================================================================
+  // Kill switch state and countdown timer for next auto-payout batch
+  // ---------- Kill Switch and Auto-Payout Cycle ----------
+
+  const [killSwitchEnabled, setKillSwitchEnabled] = useState(null);
+  const [cycle, setCycle] = useState(null); // holds backend timestamps
+  const [phase, setPhase] = useState(null); // COUNTDOWN | WAITING_FOR_ACCRUAL
+  const [countdown, setCountdown] = useState("");
+  // const [serverOffset, setServerOffset] = useState(0);
+  // const refreshedRef = useRef(false);
+
+  
+  // Load initial kill switch state
+  // useEffect(() => {
+  //   const fetchKillSwitch = async () => {
+  //     try {
+  //       const res = await axios.get("/api/commissions/kill-switch", { withCredentials: true });
+  //       if (res.status === 200 && res.data.enabled !== undefined) {
+  //         setKillSwitchEnabled(res.data.enabled);
+  //       } else {
+  //         console.error("Error fetching kill switch:", res.data);
+  //       }
+  //     } catch (err) {
+  //       console.error("Error fetching kill switch:", err.response?.data || err);
+  //     }
+  //   };
+
+  //   fetchKillSwitch();
+  // }, []);
+
+  // Toggle kill switch
+  const toggleKillSwitch = async () => {
+    try {
+      const newState = !killSwitchEnabled;
+
+      const res = await axios.post(
+        "/api/commissions/kill-switch",
+        { enabled: newState },
+        { withCredentials: true }
+      );
+
+      if (res.status === 200 && res.data.status === "ok") {
+        setKillSwitchEnabled(res.data.enabled);
+        // console.log("Kill switch updated to:", res.data.enabled);
+      } else {
+        console.error("Failed to toggle kill switch:", res.data);
+        alert("Failed to toggle kill switch: " + (res.data.message || "Unknown error"));
+      }
+    } catch (err) {
+      console.error("Error toggling kill switch:", err.response?.data || err);
+      alert("Server error while toggling kill switch");
+    }
+  };
+
+
+  // useEffect(() => {
+  //   console.count("EFFECT: serverOffset");
+
+  //   if (!cycle?.now) return;
+
+  //   setServerOffset(Date.parse(cycle.now) - Date.now());
+  // }, [cycle?.now]); // ✅ ONLY now
+
+
+
+  useEffect(() => {
+    // console.count("EFFECT: loadCycle");
+
+    const loadCycle = async () => {
+      const res = await axios.get("/api/commissions/cycle-status", { withCredentials: true });
+      setCycle(res.data);
+      setKillSwitchEnabled(res.data.kill_switch);
+      // console.log("Initial cycle data PHASE:", res.data.phase);
+    };
+
+    loadCycle();
+  }, []); // ✅ MUST BE EMPTY
+
+
+
+  // Load cycle status from backend on mount
+  // useEffect(() => {
+  //   const loadCycle = async () => {
+  //     try {
+  //       const res = await axios.get("/api/commissions/cycle-status", { withCredentials: true });
+  //       setCycle(res.data);
+  //       setKillSwitchEnabled(res.data.kill_switch); // read backend setting
+  //     } catch (err) {
+  //       console.error("Failed to fetch cycle status", err);
+  //     }
+  //   };
+
+  //   loadCycle();
+  // }, []);  // ✅ MUST BE EMPTY
+
+  // Countdown / phase updater
+  const intervalRef = useRef(null);
+
+    useEffect(() => {
+      if (!cycle) return;
+
+      const payoutTs = Date.parse(cycle.next_payout);
+      const accrualTs = Date.parse(cycle.next_accrual);
+
+      // console.log("RAW cycle data:", cycle);
+      // console.log("RAW accrual:", new Date(cycle.next_accrual));
+      // console.log("Parsed accrual:", new Date(accrualTs));
+      // console.log("RAW payout:", new Date(cycle.next_payout));
+      // console.log("Parsed payout:", new Date(payoutTs));
+      // console.log("Now:", new Date());
+      // console.log("Diff seconds:", (Date.parse(cycle.next_payout) - Date.now()) / 1000);
+
+      if (intervalRef.current) clearInterval(intervalRef.current);
+
+      intervalRef.current = setInterval(() => {
+        const now = Date.now(); // ❗ STOP adding serverOffset unless client clocks differ
+
+        // Between payout and accrual
+        if (now > payoutTs && now < accrualTs) {
+          setPhase("WAITING_FOR_ACCRUAL");
+          setCountdown("");
+          return;
+        }
+
+        // Countdown
+        if (now < payoutTs) {
+          setPhase("COUNTDOWN");
+          const diff = payoutTs - now;
+
+          const d = Math.floor(diff / 86400000);
+          const h = Math.floor((diff / 3600000) % 24);
+          const m = Math.floor((diff / 60000) % 60);
+          const s = Math.floor((diff / 1000) % 60);
+
+          setCountdown(`${d}d ${h}h ${m}m ${s}s`);
+          return;
+        }
+
+      }, 1000);
+
+      return () => clearInterval(intervalRef.current);
+    }, [cycle]);
+
+
+
+  // Get label for display
+  const getCountdownLabel = () => {
+    if (!killSwitchEnabled) {
+      return "AUTO PAYOUT DISABLED (Kill Switch Active)";
+    }
+
+    if (phase === "WAITING_FOR_ACCRUAL") {
+      return "Awaiting next accrual batch (1st of month @ 02:00).";
+    }
+
+    return `Next auto-payout in: ${countdown}`;
+  };
+
+
 //===========================================================================================================================
   
   // const payAllForUser = async (userId) => {
@@ -307,6 +481,11 @@ const Commissions = () => {
   const filteredPayouts =
     filterByMonthYearAndSalesperson(payouts, "period_end");
 
+  
+
+  
+
+
 
   return (
     <div className="p-6 bg-base-200 min-h-screen">
@@ -316,6 +495,28 @@ const Commissions = () => {
         <h2 className="text-2xl font-semibold capitalize">
           {activeView}
         </h2>
+
+        {/* Kill Switch Panel */}
+        <div className="flex items-center gap-4 bg-gray-100 dark:bg-gray-900 px-4 py-2 rounded-lg shadow-sm">
+          
+          {/* Countdown */}
+          <div className="text-sm font-mono text-gray-700 dark:text-gray-300">
+            {getCountdownLabel()}
+          </div>
+
+
+          {/* Toggle Button */}
+          <button
+            onClick={toggleKillSwitch}
+            className={`px-3 py-1 rounded text-sm font-semibold transition ${
+              killSwitchEnabled
+                ? "bg-red-600 text-white hover:bg-red-700"
+                : "bg-green-600 text-white hover:bg-green-700"
+            }`}
+          >
+            {killSwitchEnabled ? "AUTO PAYOUT ENABLED" : "AUTO PAYOUT DISABLED"}
+          </button>
+        </div>
       </div>
   
 
