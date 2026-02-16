@@ -1,5 +1,10 @@
 from datetime import date
 import calendar
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
+from zoneinfo import ZoneInfo
+
+TZ = ZoneInfo("Africa/Johannesburg")
 
 # This function is used to describe changes between two dictionaries - used for logging
 def describe_changes_log(old: dict, new: dict, fields: list = None) -> str:
@@ -45,3 +50,70 @@ def overlap_days(start1: date, end1: date, start2: date, end2: date) -> int:
         return 0
 
     return (overlap_end - overlap_start).days + 1
+
+class CycleManager:
+    def __init__(self, tz):
+        self.TZ = tz
+
+    def now(self):
+        return datetime.now(self.TZ)
+
+    def payout_this_month(self):
+        now = self.now()
+        return datetime(now.year, now.month, 20, 2, 0, tzinfo=self.TZ)
+
+    def accrual_this_month(self):
+        now = self.now()
+        return datetime(now.year, now.month, 1, 2, 0, tzinfo=self.TZ)
+
+    def next_payout_date(self):
+        now = self.now()
+        d = self.payout_this_month()
+        if now >= d:
+            d = d + relativedelta(months=1)
+        return d
+
+    def next_accrual_date(self):
+        now = self.now()
+        d = self.accrual_this_month()
+        if now >= d:
+            d = d + relativedelta(months=1)
+        return d
+
+    def commission_status(self):
+        now = self.now()
+        payout = self.payout_this_month()
+        accrual = self.accrual_this_month()
+
+        if now < payout:
+            status = "COUNTDOWN"
+            return {
+                "status": status,
+                "now": now,
+                "payout": payout,
+                "accrual": accrual
+            }
+
+        elif payout <= now < accrual:
+            status = "WAITING_FOR_ACCRUAL"
+            return {
+                "status": status,
+                "now": now,
+                "payout": payout,
+                "accrual": accrual
+            }
+
+        else:
+            # accrual has passed → roll forward
+            next_payout = payout + relativedelta(months=1)
+            next_accrual = accrual + relativedelta(months=1)
+            status = "COUNTDOWN"
+            return {
+                "status": status,
+                "now": now,
+                "payout": next_payout,
+                "accrual": next_accrual
+            }
+
+
+
