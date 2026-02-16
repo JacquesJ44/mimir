@@ -890,7 +890,7 @@ def get_commissions():
 # COMMISSION AUTO-PAYOUT TIMER & KILL SWITCH ROUTES
 #==============================================================================
 # GET current kill switch state
-@app.route("/api/commissions/kill-switch", methods=["GET"])
+@app.route("/mimir/api/commissions/kill-switch", methods=["GET"])
 def get_kill_switch():
     val = db.get_system_setting("commission_auto_pay")
     enabled = (val == "on")
@@ -899,7 +899,7 @@ def get_kill_switch():
 
 
 # POST to toggle kill switch
-@app.route("/api/commissions/kill-switch", methods=["POST"])
+@app.route("/mimir/api/commissions/kill-switch", methods=["POST"])
 def set_kill_switch():
     data = request.get_json()
     # print(data)
@@ -916,7 +916,7 @@ def set_kill_switch():
 
     return jsonify({"status": "ok", "enabled": enabled})
 
-@app.route("/api/commissions/cycle-status")
+@app.route("/mimir/api/commissions/cycle-status")
 def commissions_status():
     # Get cycle status dict from CycleManager
     cycle = cm.commission_status()
@@ -935,7 +935,7 @@ def commissions_status():
 
 #=======================================================================================================================================
 
-@app.route("/api/commissions/apply", methods=["POST"])
+@app.route("/mimir/api/commissions/apply", methods=["POST"])
 @jwt_required()
 @role_required(['admin', 'sales', 'technician'])
 def apply_commission():

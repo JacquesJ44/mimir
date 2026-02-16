@@ -69,7 +69,7 @@ const Commissions = () => {
     // 2️⃣ Fetch kill switch state from backend
     const fetchKillSwitch = async () => {
       try {
-        const res = await axios.get("/api/commissions/kill-switch", { withCredentials: true });
+        const res = await axios.get("/mimir/api/commissions/kill-switch", { withCredentials: true });
         setKillSwitchEnabled(res.data.enabled);
         // console.log("Commission auto-pay state:", res.data.enabled);
       } catch (err) {
@@ -265,7 +265,7 @@ const Commissions = () => {
       const newState = !killSwitchEnabled;
 
       const res = await axios.post(
-        "/api/commissions/kill-switch",
+        "/mimir/api/commissions/kill-switch",
         { enabled: newState },
         { withCredentials: true }
       );
@@ -298,7 +298,7 @@ const Commissions = () => {
     // console.count("EFFECT: loadCycle");
 
     const loadCycle = async () => {
-      const res = await axios.get("/api/commissions/cycle-status", { withCredentials: true });
+      const res = await axios.get("/mimir/api/commissions/cycle-status", { withCredentials: true });
       setCycle(res.data);
       setKillSwitchEnabled(res.data.kill_switch);
       // console.log("Initial cycle data PHASE:", res.data.phase);
