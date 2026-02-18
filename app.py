@@ -183,68 +183,20 @@ def validate_decimal_field(value, field_name):
     except (InvalidOperation, TypeError, ValueError):
         raise ValueError(f"{field_name} is not a valid decimal")
 
-# These four functions calculate the current month, payout date and accrual date and also keeps everything in SAST timezone. This ensures that the commission processes run at the correct local time regardless of where the server is hosted. The accrual date is set to the 1st of the month at 2am SAST, and the payout date is set to the 20th of the month at 2am SAST.
-# def now_sast():
-#     return datetime.now(TZ)
-
-# def now_sast():
-#     return datetime.now(TZ)
-
-# def payout_this_month():
-#     now = now_sast()
-#     return datetime(now.year, now.month, 16, 11, 8, tzinfo=TZ)
-
-# def accrual_this_month():
-#     now = now_sast()
-#     return datetime(now.year, now.month, 16, 12, 59, tzinfo=TZ)
-
-# def next_payout_date():
-#     now = now_sast()
-
-#     d = payout_this_month()
-#     print("NOW:", now, "PAYOUT DATE:", d)
-#     if now >= d:
-#         d = d + relativedelta(months=1)
-#     print("NEXT PAYOUT DATE:", d)    
-#     return d
-
-# def next_accrual_date():
-#     now = now_sast()
-#     d = accrual_this_month()
-#     # print("NOW:", now, "ACCRUAL DATE:", d)
-#     if now >= d:
-#         d = d + relativedelta(months=1)
-#         # print("NEXT ACCRUAL DATE:", d)
-#     return d
-
-# def get_cycle_dates():
-#     now = now_sast()
-
-#     payout = next_payout_date()
-#     accrual = next_accrual_date()
-
-#     return now, payout, accrual
-
-# def commission_status():
-#     now = now_sast()
-#     payout = payout_this_month()
-#     accrual = accrual_this_month()
-
-#     print(f"NOW: {now}, PAYOUT: {payout}, ACCRUAL: {accrual}")
-
-#     if now < payout:
-#         return "COUNTDOWN"
-#     elif payout <= now < accrual:
-#         return "WAITING_FOR_ACCRUAL"
-#     else:
-#         return "EXECUTED"
-
-
-
-
-
-
-
+def parse_bool(value):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in ("true", "on", "1", "yes"):  # treat as True
+            return True
+        if v in ("false", "off", "0", "no"):  # treat as False
+            return False
+    raise ValueError(f"Invalid boolean value: {value!r}")
 
 
 #========================================================================================================================
@@ -889,34 +841,40 @@ def get_commissions():
 #==============================================================================    
 # COMMISSION AUTO-PAYOUT TIMER & KILL SWITCH ROUTES
 #==============================================================================
-# GET current kill switch state
+
+# GET: Return the kill-switch state as a proper boolean
 @app.route("/api/commissions/kill-switch", methods=["GET"])
+@jwt_required()
 def get_kill_switch():
-    val = db.get_system_setting("commission_auto_pay")
-    enabled = (val == "on")
-    print("Commission auto-pay state:", enabled)
-    return jsonify({"enabled": enabled})
+    raw = db.get_system_setting("commission_auto_pay")  # "on" | "off" (legacy)
+    # "on" -> auto payout enabled
+    auto_payout_enabled = False
+    if isinstance(raw, str):
+        auto_payout_enabled = raw.strip().lower() in ("on", "true", "1", "yes")
+    elif isinstance(raw, (int, float, bool)):
+        auto_payout_enabled = bool(raw)
+    # print(f"Kill switch raw value: {raw}, interpreted as: {auto_payout_enabled}")
+    return jsonify({"autoPayoutEnabled": bool(auto_payout_enabled)}), 200
 
-
-# POST to toggle kill switch
+# POST: Set the kill-switch state, store consistently, and return boolean
 @app.route("/api/commissions/kill-switch", methods=["POST"])
+@jwt_required()
 def set_kill_switch():
-    data = request.get_json()
-    # print(data)
-    if "enabled" not in data:
-        return jsonify({"error": "commission_auto_pay field is required"}), 400
+    payload = request.get_json(silent=True) or {}
+    if "autoPayoutEnabled" not in payload:
+        return jsonify({"error": "'autoPayoutEnabled' is required"}), 400
+    try:
+        auto_payout_enabled = parse_bool(payload["autoPayoutEnabled"])
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
 
-    enabled = (data["enabled"])
-    # print("Kill switch state:", enabled)
+    # Persist using your existing convention
+    db.set_system_setting("commission_auto_pay", "on" if auto_payout_enabled else "off")
 
-    db.set_system_setting(
-        "commission_auto_pay", 
-        "on" if enabled == True or enabled == "true" else "off"
-    )
-
-    return jsonify({"status": "ok", "enabled": enabled})
+    return jsonify({"status": "ok", "autoPayoutEnabled": auto_payout_enabled}), 200
 
 @app.route("/api/commissions/cycle-status")
+# @jwt_required()
 def commissions_status():
     # Get cycle status dict from CycleManager
     cycle = cm.commission_status()

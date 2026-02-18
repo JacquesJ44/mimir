@@ -60,11 +60,11 @@ class CycleManager:
 
     def payout_this_month(self):
         now = self.now()
-        return datetime(now.year, now.month, 20, 2, 0, tzinfo=self.TZ)
+        return datetime(now.year, now.month, 18, 18, 20, tzinfo=self.TZ)
 
     def accrual_this_month(self):
         now = self.now()
-        return datetime(now.year, now.month, 1, 2, 0, tzinfo=self.TZ)
+        return datetime(now.year, now.month, 18, 18, 13, tzinfo=self.TZ)
 
     def next_payout_date(self):
         now = self.now()

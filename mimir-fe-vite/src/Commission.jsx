@@ -65,20 +65,6 @@ const Commissions = () => {
         console.error("Invalid token:", err);
       }
     }
-
-    // 2️⃣ Fetch kill switch state from backend
-    const fetchKillSwitch = async () => {
-      try {
-        const res = await axios.get("/api/commissions/kill-switch", { withCredentials: true });
-        setKillSwitchEnabled(res.data.enabled);
-        // console.log("Commission auto-pay state:", res.data.enabled);
-      } catch (err) {
-        console.error("Failed to fetch kill switch state:", err);
-        setKillSwitchEnabled(false); // fallback default
-      }
-    };
-
-    fetchKillSwitch();
   }, []);
 
 
@@ -224,108 +210,101 @@ const Commissions = () => {
         selectedYear === "" || d.getFullYear() === Number(selectedYear);
 
       const matchesSalesperson =
-        selectedSalesPerson === "" ||
-        r.salesperson_name === selectedSalesPerson ||
-        `${r.user_name ?? ""} ${r.user_surname ?? ""}`.trim() === selectedSalesPerson;
-
+      selectedSalesPerson === "" ||
+      r.salesperson_name === selectedSalesPerson ||
+      `${r.user_name ?? ""} ${r.user_surname ?? ""}`.trim() === selectedSalesPerson;
+      
       return matchesMonth && matchesYear && matchesSalesperson;
     });
   };
-
+  
   //=====================================================================================================================================
   // Kill switch state and countdown timer for next auto-payout batch
+  
   // ---------- Kill Switch and Auto-Payout Cycle ----------
-
-  const [killSwitchEnabled, setKillSwitchEnabled] = useState(null);
   const [cycle, setCycle] = useState(null); // holds backend timestamps
   const [phase, setPhase] = useState(null); // COUNTDOWN | WAITING_FOR_ACCRUAL
   const [countdown, setCountdown] = useState("");
+  const [autoPayoutEnabled, setAutoPayoutEnabled] = useState(null); // null = loading
   // const [serverOffset, setServerOffset] = useState(0);
   // const refreshedRef = useRef(false);
-
   
-  // Load initial kill switch state
-  // useEffect(() => {
-  //   const fetchKillSwitch = async () => {
-  //     try {
-  //       const res = await axios.get("/api/commissions/kill-switch", { withCredentials: true });
-  //       if (res.status === 200 && res.data.enabled !== undefined) {
-  //         setKillSwitchEnabled(res.data.enabled);
-  //       } else {
-  //         console.error("Error fetching kill switch:", res.data);
-  //       }
-  //     } catch (err) {
-  //       console.error("Error fetching kill switch:", err.response?.data || err);
-  //     }
-  //   };
+  // 2️⃣ Fetch kill switch state from backend
+  useEffect(() => {
+    let cancelled = false;
 
-  //   fetchKillSwitch();
-  // }, []);
+    (async () => {
+      try {
+        const res = await axios.get("/api/commissions/kill-switch", { withCredentials: true });
 
-  // Toggle kill switch
-  const toggleKillSwitch = async () => {
+        // Accept both shapes: { enabled: true } or { autoPayoutEnabled: true }
+        const raw =
+          res?.data?.enabled ??
+          res?.data?.autoPayoutEnabled ??
+          res?.data?.commission_auto_pay; // if you ever return the raw DB field
+
+        const enabled =
+          typeof raw === "boolean"
+            ? raw
+            : String(raw).toLowerCase() === "true" || raw === "on";
+
+        if (!cancelled) setAutoPayoutEnabled(enabled);
+        // console.log("[KILL-PARSED]", { raw, enabled });
+      } catch (err) {
+        console.error("[KILL-GET][ERROR]", err);
+        if (!cancelled) setAutoPayoutEnabled(prev => prev ?? null); // don't force false
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, []);
+
+
+    // Toggle kill switch
+    const toggleAutoPayout = async () => {
+    if (typeof autoPayoutEnabled !== "boolean") return;
+
+    const optimistic = !autoPayoutEnabled;
+    setAutoPayoutEnabled(optimistic);
+
     try {
-      const newState = !killSwitchEnabled;
-
       const res = await axios.post(
         "/api/commissions/kill-switch",
-        { enabled: newState },
+        { autoPayoutEnabled: optimistic },
         { withCredentials: true }
       );
-
-      if (res.status === 200 && res.data.status === "ok") {
-        setKillSwitchEnabled(res.data.enabled);
-        // console.log("Kill switch updated to:", res.data.enabled);
-      } else {
-        console.error("Failed to toggle kill switch:", res.data);
-        alert("Failed to toggle kill switch: " + (res.data.message || "Unknown error"));
-      }
+      const v = res?.data?.autoPayoutEnabled;
+      const confirmed = typeof v === "boolean" ? v : String(v).toLowerCase() === "true";
+      setAutoPayoutEnabled(confirmed);
     } catch (err) {
-      console.error("Error toggling kill switch:", err.response?.data || err);
-      alert("Server error while toggling kill switch");
+      console.error("Toggle failed; reverting:", err);
+      setAutoPayoutEnabled(prev => !prev);
     }
   };
 
 
-  // useEffect(() => {
-  //   console.count("EFFECT: serverOffset");
-
-  //   if (!cycle?.now) return;
-
-  //   setServerOffset(Date.parse(cycle.now) - Date.now());
-  // }, [cycle?.now]); // ✅ ONLY now
-
-
-
+  
+  // FETCH: Cycle status (independent)
   useEffect(() => {
-    // console.count("EFFECT: loadCycle");
+    let cancelled = false;
 
-    const loadCycle = async () => {
-      const res = await axios.get("/api/commissions/cycle-status", { withCredentials: true });
-      setCycle(res.data);
-      setKillSwitchEnabled(res.data.kill_switch);
-      // console.log("Initial cycle data PHASE:", res.data.phase);
-    };
+    (async () => {
+      try {
+        const res = await axios.get("/api/commissions/cycle-status", { withCredentials: true });
+        if (!cancelled) {
+          setCycle(res.data ?? null);
+          // setPhase(res.data?.phase ?? null);
+          // setCountdown(res.data?.countdown ?? "");
+        }
+      } catch (err) {
+        console.error("[cycle-status] fetch failed:", err);
+        if (!cancelled) setCycle(prev => prev ?? null);
+      }
+    })();
+    // console.log("cycle-status fetch initiated", cycle);
+    return () => { cancelled = true; };
+  }, []);
 
-    loadCycle();
-  }, []); // ✅ MUST BE EMPTY
-
-
-
-  // Load cycle status from backend on mount
-  // useEffect(() => {
-  //   const loadCycle = async () => {
-  //     try {
-  //       const res = await axios.get("/api/commissions/cycle-status", { withCredentials: true });
-  //       setCycle(res.data);
-  //       setKillSwitchEnabled(res.data.kill_switch); // read backend setting
-  //     } catch (err) {
-  //       console.error("Failed to fetch cycle status", err);
-  //     }
-  //   };
-
-  //   loadCycle();
-  // }, []);  // ✅ MUST BE EMPTY
 
   // Countdown / phase updater
   const intervalRef = useRef(null);
@@ -336,13 +315,13 @@ const Commissions = () => {
       const payoutTs = Date.parse(cycle.next_payout);
       const accrualTs = Date.parse(cycle.next_accrual);
 
-      // console.log("RAW cycle data:", cycle);
-      // console.log("RAW accrual:", new Date(cycle.next_accrual));
-      // console.log("Parsed accrual:", new Date(accrualTs));
-      // console.log("RAW payout:", new Date(cycle.next_payout));
-      // console.log("Parsed payout:", new Date(payoutTs));
-      // console.log("Now:", new Date());
-      // console.log("Diff seconds:", (Date.parse(cycle.next_payout) - Date.now()) / 1000);
+      console.log("RAW cycle data:", cycle);
+      console.log("RAW accrual:", new Date(cycle.next_accrual));
+      console.log("Parsed accrual:", new Date(accrualTs));
+      console.log("RAW payout:", new Date(cycle.next_payout));
+      console.log("Parsed payout:", new Date(payoutTs));
+      console.log("Now:", new Date());
+      console.log("Diff seconds:", (Date.parse(cycle.next_payout) - Date.now()) / 1000);
 
       if (intervalRef.current) clearInterval(intervalRef.current);
 
@@ -375,20 +354,33 @@ const Commissions = () => {
       return () => clearInterval(intervalRef.current);
     }, [cycle]);
 
+    // Get label for display
+    // utils: force to boolean if backend ever sends "true"/"false" strings
+    const toBool = (v) =>
+      typeof v === "boolean" ? v : String(v).trim().toLowerCase() === "true";
 
+    const getCountdownLabel = () => {
+      // 0) Loading state distinct from disabled
+      if (autoPayoutEnabled === null) {
+        return "Loading auto-payout status…";
+      }
 
-  // Get label for display
-  const getCountdownLabel = () => {
-    if (!killSwitchEnabled) {
-      return "AUTO PAYOUT DISABLED (Kill Switch Active)";
-    }
+      // 1) Canonical boolean
+      const enabled = toBool(autoPayoutEnabled);
 
-    if (phase === "WAITING_FOR_ACCRUAL") {
-      return "Awaiting next accrual batch (1st of month @ 02:00).";
-    }
+      // 2) Disabled path
+      if (enabled === false) {
+        return "AUTO PAYOUT DISABLED (Kill Switch Active)";
+      }
 
-    return `Next auto-payout in: ${countdown}`;
-  };
+      // 3) Enabled + waiting
+      if (phase === "WAITING_FOR_ACCRUAL") {
+        return "Awaiting next accrual batch (1st of month @ 02:00).";
+      }
+
+      // 4) Enabled + countdown
+      return `Next auto-payout in: ${countdown ?? ""}`.trim();
+    };
 
 
 //===========================================================================================================================
@@ -451,8 +443,6 @@ const Commissions = () => {
   }, [activeView]);
 
 
-
-
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -485,42 +475,46 @@ const Commissions = () => {
     filterByMonthYearAndSalesperson(payouts, "period_end");
 
   
-
-  
-
-
-
   return (
     <div className="p-6 bg-base-200 min-h-screen">
       <div className="max-w-7xl mx-auto card bg-white dark:bg-gray-800 shadow-xl p-8">
         
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-semibold capitalize">
-          {activeView}
-        </h2>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-semibold capitalize">
+            {activeView}
+          </h2>
 
-        {/* Kill Switch Panel */}
-        <div className="flex items-center gap-4 bg-gray-100 dark:bg-gray-900 px-4 py-2 rounded-lg shadow-sm">
-          
-          {/* Countdown */}
-          <div className="text-sm font-mono text-gray-700 dark:text-gray-300">
-            {getCountdownLabel()}
-          </div>
+          {/* Kill Switch Panel */}
+          {canFilterBySalesPerson && (
+            <div className="flex items-center gap-4 bg-gray-100 dark:bg-gray-900 px-4 py-2 rounded-lg shadow-sm">
+              {/* Countdown */}
+              <div className="text-sm font-mono text-gray-700 dark:text-gray-300">
+                {getCountdownLabel()}
+              </div>
 
-
-          {/* Toggle Button */}
-          <button
-            onClick={toggleKillSwitch}
-            className={`px-3 py-1 rounded text-sm font-semibold transition ${
-              killSwitchEnabled
-                ? "bg-red-600 text-white hover:bg-red-700"
-                : "bg-green-600 text-white hover:bg-green-700"
-            }`}
-          >
-            {killSwitchEnabled ? "AUTO PAYOUT ENABLED" : "AUTO PAYOUT DISABLED"}
-          </button>
+              {/* Toggle Button */}
+              {autoPayoutEnabled === null ? (
+                <button
+                  disabled
+                  className="px-3 py-1 rounded text-sm font-semibold bg-gray-400 text-white opacity-70 cursor-not-allowed"
+                >
+                  LOADING…
+                </button>
+              ) : (
+                <button
+                  onClick={toggleAutoPayout}
+                  className={`px-3 py-1 rounded text-sm font-semibold transition ${
+                    autoPayoutEnabled
+                      ? "bg-red-600 text-white hover:bg-red-700"
+                      : "bg-green-600 text-white hover:bg-green-700"
+                  }`}
+                >
+                  {autoPayoutEnabled ? "AUTO PAYOUT ENABLED" : "AUTO PAYOUT DISABLED"}
+                </button>
+              )}
+            </div>
+          )}
         </div>
-      </div>
   
 
         
@@ -835,7 +829,7 @@ const Commissions = () => {
         {activeView === "Payouts" && (
           <>
             <div className="text-center text-base-content">
-              {earnings.length === 0 ? (
+              {filteredPayouts.length === 0 ? (
                 <p className="text-center text-gray-500">No payout summary found.</p>
               ) : (
                 <div className="overflow-auto max-h-150">
@@ -856,51 +850,50 @@ const Commissions = () => {
                     </thead>
                     <tbody>
                       {filteredPayouts.map((p) => {
+                        // Safe helpers
+                        const fullName =
+                          [p.user_name, p.user_surname].filter(Boolean).join(" ").trim() || "-";
+
+                        const commissionStr =
+                          p?.commission_value !== null &&
+                          p?.commission_value !== undefined &&
+                          !Number.isNaN(Number(p.commission_value))
+                            ? `R${Number(p.commission_value).toFixed(2)}`
+                            : "-";
+
+                        const statusClass =
+                          statusColors?.[p.status] ?? "bg-gray-100 text-gray-800";
+
                         return (
                           <tr key={p.id}>
                             <td>{p.id}</td>
-                            <td>{p.user_name + " " + p.user_surname || "-"}</td>
-                            <td className="text-right whitespace-nowrap">{p.circuit_number || "-" }</td>
-                            <td className="text-right whitespace-nowrap">{p.client_name || "-" }</td>
-                            <td className="text-right whitespace-nowrap">{p.active_days || "-" }</td>
-                            <td className="text-right whitespace-nowrap">{p.period_end || "-"}</td>
-                            <td className="text-right whitespace-nowrap">{p.entry_type || "-"}</td>
+                            <td>{fullName}</td>
                             <td className="text-right whitespace-nowrap">
-                              {p.commission_value ? `R${Number(p.commission_value).toFixed(2)}` : "-"}
+                              {p.circuit_number || "-"}
                             </td>
-                            {/* <td className="text-right whitespace-nowrap">{p.status || "-"}</td> */}
-                            <span className={`badge ${statusColors[p.status]}`}>
-                                {p.status}
+                            <td className="text-right whitespace-nowrap">
+                              {p.client_name || "-"}
+                            </td>
+                            <td className="text-right whitespace-nowrap">
+                              {p.active_days ?? "-"}
+                            </td>
+                            <td className="text-right whitespace-nowrap">
+                              {p.period_end || "-"}
+                            </td>
+                            <td className="text-right whitespace-nowrap">
+                              {p.entry_type || "-"}
+                            </td>
+                            <td className="text-right whitespace-nowrap">{commissionStr}</td>
+
+                            {/* ✅ The status badge MUST be inside a <td>, not directly under <tr> */}
+                            <td className="text-right whitespace-nowrap">
+                              <span className={`badge ${statusClass}`}>
+                                {p.status ?? "-"}
                               </span>
-                            {/* <td>
-                              <div className="dropdown">
-                                <label tabIndex={0} className="btn btn-xs btn-accent">
-                                  Actions
-                                </label>
-                                <ul
-                                  tabIndex={0}
-                                  className="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-32 static"
-                                >
-                                  <li>
-                                    <button
-                                      disabled={p.entry_type !== "earned" || p.status !== "pending"}
-                                      onClick={() => payCommission(p.id, p.user_id)}
-                                    >
-                                      Pay
-                                    </button>
-                                  </li>
-                                  <li>
-                                    <button onClick={() => pauseCommission(commissionId)}>Pause</button>
-                                  </li>
-                                  <li>
-                                    <button onClick={() => reverseCommission(commissionId)}>Reverse</button>
-                                  </li>
-                                  <li>
-                                    <button onClick={() => cancelCommission(commissionId)}>Cancel</button>
-                                  </li>
-                                </ul>
-                              </div>
-                            </td> */}
+                            </td>
+
+                            {/* If you want the Actions column later, add another <td> here */}
+                            {/* <td>...actions...</td> */}
                           </tr>
                         );
                       })}
