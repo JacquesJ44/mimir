@@ -1406,7 +1406,7 @@ class DbUtil:
                 c.execute("SELECT setting_value FROM system_settings WHERE setting_key = %s", (key,))
                 row = c.fetchone()
                 # print(f"System setting lookup for '{key}': {row[0] if row else 'not found'}")
-                # print(row)
+                # print(row[0])
                 return row[0] if row else None
         finally:
             conn.close()
