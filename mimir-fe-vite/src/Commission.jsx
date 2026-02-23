@@ -306,79 +306,70 @@ const Commissions = () => {
   // Countdown / phase updater
   const intervalRef = useRef(null);
 
-    useEffect(() => {
-      if (!cycle) return;
+  useEffect(() => {
+    if (!cycle) return;
 
-      const payoutTs = Date.parse(cycle.next_payout);
-      const accrualTs = Date.parse(cycle.next_accrual);
+    // Always sync phase directly from backend
+    setPhase(cycle.phase);
 
-      console.log("RAW cycle data:", cycle);
-      console.log("RAW accrual:", new Date(cycle.next_accrual));
-      console.log("Parsed accrual:", new Date(accrualTs));
-      console.log("RAW payout:", new Date(cycle.next_payout));
-      console.log("Parsed payout:", new Date(payoutTs));
-      console.log("Now:", new Date());
-      console.log("Diff seconds:", (Date.parse(cycle.next_payout) - Date.now()) / 1000);
+    // Debug log: show phase and key dates
+    console.log("DEBUG Frontend Cycle:", {
+      phase: cycle.phase,
+      now: new Date().toISOString(),
+      current_payout: cycle.current_payout,
+      current_accrual: cycle.current_accrual,
+      next_payout: cycle.next_payout,
+      next_accrual: cycle.next_accrual
+    });
 
-      if (intervalRef.current) clearInterval(intervalRef.current);
+    if (intervalRef.current) clearInterval(intervalRef.current);
 
-      intervalRef.current = setInterval(() => {
-        const now = Date.now(); // ❗ STOP adding serverOffset unless client clocks differ
+    intervalRef.current = setInterval(() => {
+      if (cycle.phase === "COUNTDOWN") {
+        const payoutTs = Date.parse(cycle.current_payout);
+        const now = Date.now();
+        const diff = payoutTs - now;
 
-        // Between payout and accrual
-        if (now > payoutTs && now < accrualTs) {
-          setPhase("WAITING_FOR_ACCRUAL");
-          setCountdown("");
-          return;
-        }
+        const d = Math.floor(diff / 86400000);
+        const h = Math.floor((diff / 3600000) % 24);
+        const m = Math.floor((diff / 60000) % 60);
+        const s = Math.floor((diff / 1000) % 60);
 
-        // Countdown
-        if (now < payoutTs) {
-          setPhase("COUNTDOWN");
-          const diff = payoutTs - now;
-
-          const d = Math.floor(diff / 86400000);
-          const h = Math.floor((diff / 3600000) % 24);
-          const m = Math.floor((diff / 60000) % 60);
-          const s = Math.floor((diff / 1000) % 60);
-
-          setCountdown(`${d}d ${h}h ${m}m ${s}s`);
-          return;
-        }
-
-      }, 1000);
-
-      return () => clearInterval(intervalRef.current);
-    }, [cycle]);
-
-    // Get label for display
-    // utils: force to boolean if backend ever sends "true"/"false" strings
-    const toBool = (v) =>
-      typeof v === "boolean" ? v : String(v).trim().toLowerCase() === "true";
-
-    const getCountdownLabel = () => {
-      // 0) Loading state distinct from disabled
-      if (autoPayoutEnabled === null) {
-        return "Loading auto-payout status…";
+        setCountdown(`${d}d ${h}h ${m}m ${s}s`);
+      } else {
+        setCountdown("");
       }
+    }, 1000);
 
-      // 1) Canonical boolean
-      const enabled = toBool(autoPayoutEnabled);
+    return () => clearInterval(intervalRef.current);
+  }, [cycle]);
 
-      // 2) Disabled path
-      if (enabled === false) {
-        return "AUTO PAYOUT DISABLED (Kill Switch Active)";
-      }
+  // Get label for display
+  // utils: force to boolean if backend ever sends "true"/"false" strings
+  const toBool = (v) =>
+    typeof v === "boolean" ? v : String(v).trim().toLowerCase() === "true";
 
-      // 3) Enabled + waiting
-      if (phase === "WAITING_FOR_ACCRUAL") {
-        return "Awaiting next accrual batch (1st of month @ 02:00).";
-      }
+  const getCountdownLabel = () => {
+    if (autoPayoutEnabled === null || phase === null) {
+      return "Loading auto-payout status…";
+    }
 
-      // 4) Enabled + countdown
+    const enabled = toBool(autoPayoutEnabled);
+
+    if (!enabled) {
+      return "AUTO PAYOUT DISABLED (Kill Switch Active)";
+    }
+
+    if (phase === "WAITING_FOR_ACCRUAL") {
+      return "Awaiting next accrual batch (1st of month @ 02:00).";
+    }
+
+    if (phase === "COUNTDOWN") {
       return `Next auto-payout in: ${countdown ?? ""}`.trim();
-    };
+    }
 
+    return ""; // no fallback needed anymore
+  };
 
 //===========================================================================================================================
   
