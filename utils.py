@@ -107,6 +107,7 @@ class CycleManager:
             next_payout = current_payout + relativedelta(months=1)
             next_accrual = current_accrual + relativedelta(months=1)
 
+
         # print("DEBUG:")
         # for key, value in {
         #     "now": now,
