@@ -318,7 +318,7 @@ const Commissions = () => {
     // Debug log: show phase and key dates
     console.log("DEBUG Frontend Cycle:", {
       phase: cycle.phase,
-      now: new Date().toISOString(),
+      now: cycle.now,
       current_payout: cycle.current_payout,
       current_accrual: cycle.current_accrual,
       next_payout: cycle.next_payout,
