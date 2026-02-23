@@ -884,8 +884,10 @@ def commissions_status():
 
     return jsonify({
         "now": cycle["now"].isoformat(),
-        "next_accrual": cycle["accrual"].isoformat(),
-        "next_payout": cycle["payout"].isoformat(),
+        "current_accrual": cycle["current_accrual"].isoformat(),
+        "current_payout": cycle["current_payout"].isoformat(),
+        "next_accrual": cycle["next_accrual"].isoformat(),
+        "next_payout": cycle["next_payout"].isoformat(),
         "phase": cycle["status"],
         "auto_payout_enabled": kill_switch_enabled
     })
