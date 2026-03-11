@@ -4,6 +4,8 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from zoneinfo import ZoneInfo
 
+from pprint import pprint
+
 TZ = ZoneInfo("Africa/Johannesburg")
 
 # This function is used to describe changes between two dictionaries - used for logging
@@ -57,74 +59,195 @@ class CycleManager:
 
     def now(self):
         return datetime.now(self.TZ)
+    
+# ---------- Anchor constructors ----------
+    def _accrual_anchor(self, year: int, month: int) -> datetime:
+        # 1st at 02:00 of given month
+        return datetime(year, month, 9, 21, 0, tzinfo=self.TZ)
 
-    def current_payout_date(self):
-        """Return the most recent payout date (20th @ 02:00)."""
+    def _payout_anchor(self, year: int, month: int) -> datetime:
+        # 20th at 02:00 of given month
+        return datetime(year, month, 9, 20, 40, tzinfo=self.TZ)
+    
+# ---------- Current "window" boundaries for the month of `now` ----------
+    def this_month_accrual(self, now: datetime) -> datetime:
+        return self._accrual_anchor(now.year, now.month)
+
+    def this_month_payout(self, now: datetime) -> datetime:
+        return self._payout_anchor(now.year, now.month)
+    
+    
+# ---------- Public API ----------
+    def current_payout_date(self) -> datetime:
+        """
+        The most recent payout date relative to 'now':
+        - If now < this month's payout (20th @ 02:00), then last month's payout.
+        - Else, this month's payout.
+        """
         now = self.now()
-        this_month = datetime(now.year, now.month, 20, 2, 0, tzinfo=self.TZ)
-        if now < this_month:
-            # Haven't reached this month's payout yet → use last month's
-            return this_month - relativedelta(months=1)
+        this_payout = self.this_month_payout(now)
+        if now < this_payout:
+            return this_payout - relativedelta(months=1)
         else:
-            # Already passed this month's payout → use this one
-            return this_month
+            return this_payout
 
-    def next_payout_date(self):
-        """Return the next upcoming payout date (20th @ 02:00)."""
+    def next_payout_date(self) -> datetime:
+        """The next upcoming payout date (20th @ 02:00) after 'now'."""
         return self.current_payout_date() + relativedelta(months=1)
 
-    def next_accrual_date(self):
-        """Return the next upcoming accrual date (1st @ 02:00)."""
+    def next_accrual_date(self) -> datetime:
+        """
+        The next upcoming accrual date (1st @ 02:00) after 'now':
+        - If now < this month's accrual (1st @ 02:00), return this month's.
+        - Else, next month's accrual.
+        """
         now = self.now()
-        this_month = datetime(now.year, now.month, 1, 2, 0, tzinfo=self.TZ)
-        if now < this_month:
-            return this_month
+        this_accrual = self.this_month_accrual(now)
+        if now < this_accrual:
+            return this_accrual
         else:
-            return this_month + relativedelta(months=1)
-
+            return this_accrual + relativedelta(months=1)
+        
+    
     def commission_status(self):
+        """
+        STATUS rules:
+        - COUNTDOWN: from 1st @ 02:00 (inclusive) to 20th @ 02:00 (exclusive).
+        - WAITING_FOR_ACCRUAL: from 20th @ 02:00 (inclusive) to next 1st @ 02:00 (exclusive).
+        - At exact 02:00 boundaries, the NEW status applies immediately.
+        """
         now = self.now()
-        payout = self.current_payout_date()
-        accrual = self.next_accrual_date()
-        next_payout = self.next_payout_date()
+        # Anchors for the month of `now`
+        accrual = self.this_month_accrual(now)       # 1st @ 02:00 this month
+        payout = self.this_month_payout(now)         # 20th @ 02:00 this month
         next_accrual = accrual + relativedelta(months=1)
+        next_payout  = payout  + relativedelta(months=1)
 
-        if now < payout:
-            status = "COUNTDOWN"
-            current_payout = payout
-            current_accrual = accrual
-
-        elif payout <= now < accrual:
+            
+# Determine status region and "current/next" dates perspective
+        if now < accrual:
+            # We're BEFORE this month's accrual → still waiting for accrual window
+            # Interval: (last payout @20th 02:00) → [this accrual @1st 02:00)
             status = "WAITING_FOR_ACCRUAL"
-            current_payout = payout
             current_accrual = accrual
+            current_payout  = (payout - relativedelta(months=1))  # last payout
+            # Upcoming boundaries after this window:
+            next_accrual = accrual                                 # same as current_accrual
+            next_payout  = payout
+
+        elif accrual <= now < payout:
+            # Between 1st @02:00 and 20th @02:00 → COUNTDOWN window
+            status = "COUNTDOWN"
+            current_accrual = accrual
+            current_payout  = payout
+            # Upcoming boundaries:
+            next_accrual = accrual + relativedelta(months=1)
+            next_payout  = payout  + relativedelta(months=1)
 
         else:
-            # After accrual → roll forward
-            status = "COUNTDOWN"
-            current_payout = next_payout
-            current_accrual = next_accrual
-            next_payout = current_payout + relativedelta(months=1)
+            # now >= payout (i.e., from 20th @02:00 up to next 1st @02:00)
+            status = "WAITING_FOR_ACCRUAL"
+            current_accrual = next_accrual            # next accrual is the one we're waiting for
+            current_payout  = payout                  # the payout that just happened (or is happening)
+            # Upcoming boundaries after this window:
+            next_payout  = payout + relativedelta(months=1)
             next_accrual = current_accrual + relativedelta(months=1)
 
-        # print("DEBUG:")
-        # for key, value in {
-        #     "now": now,
-        #     "payout": payout,
-        #     "accrual": accrual,
-        #     "next_payout": next_payout,
-        #     "next_accrual": next_accrual
-        # }.items():
-        #     print(f"  {key}: {value}")
-
-        return {
+        pprint("DEBUG:")
+        for key, value in {
             "status": status,
             "now": now,
-            "current_payout": current_payout,
-            "current_accrual": current_accrual,
+            "accrual": accrual,
+            "payout": payout,
+            "next_accrual": next_accrual,
             "next_payout": next_payout,
-            "next_accrual": next_accrual
-        }
+            "current_accrual": current_accrual,
+            "current_payout": current_payout
+        }.items():
+            pprint(f"  {key}: {value}")
+        
+        return {
+                    "status": status,
+                    "now": now,
+                    "current_payout": current_payout,
+                    "current_accrual": current_accrual,
+                    "next_payout": next_payout,
+                    "next_accrual": next_accrual
+                }
+
+
+
+
+
+
+
+    # def current_payout_date(self):
+    #     """Return the most recent payout date (20th @ 02:00)."""
+    #     now = self.now()
+    #     this_month = datetime(now.year, now.month, 20, 2, 0, tzinfo=self.TZ)
+    #     if now < this_month:
+    #         # Haven't reached this month's payout yet → use last month's
+    #         return this_month - relativedelta(months=1)
+    #     else:
+    #         # Already passed this month's payout → use this one
+    #         return this_month
+
+    # def next_payout_date(self):
+    #     """Return the next upcoming payout date (20th @ 02:00)."""
+    #     return self.current_payout_date() + relativedelta(months=1)
+
+    # def next_accrual_date(self):
+    #     """Return the next upcoming accrual date (1st @ 02:00)."""
+    #     now = self.now()
+    #     this_month = datetime(now.year, now.month, 1, 2, 0, tzinfo=self.TZ)
+    #     if now < this_month:
+    #         return this_month
+    #     else:
+    #         return this_month + relativedelta(months=1)
+
+    # def commission_status(self):
+    #     now = self.now()
+    #     payout = self.current_payout_date()
+    #     accrual = self.next_accrual_date()
+    #     next_payout = self.next_payout_date()
+    #     next_accrual = accrual + relativedelta(months=1)
+
+    #     if now < payout:
+    #         status = "COUNTDOWN"
+    #         current_payout = payout
+    #         current_accrual = accrual
+
+    #     elif payout <= now < next_accrual:
+    #         status = "WAITING_FOR_ACCRUAL"
+    #         current_payout = payout
+    #         current_accrual = accrual
+
+    #     else:
+    #         # After accrual → roll forward
+    #         status = "COUNTDOWN"
+    #         current_payout = next_payout
+    #         current_accrual = next_accrual
+    #         next_payout = current_payout + relativedelta(months=1)
+    #         next_accrual = current_accrual + relativedelta(months=1)
+
+    #     # print("DEBUG:")
+    #     # for key, value in {
+    #     #     "now": now,
+    #     #     "payout": payout,
+    #     #     "accrual": accrual,
+    #     #     "next_payout": next_payout,
+    #     #     "next_accrual": next_accrual
+    #     # }.items():
+    #     #     print(f"  {key}: {value}")
+
+    #     return {
+    #         "status": status,
+    #         "now": now,
+    #         "current_payout": current_payout,
+    #         "current_accrual": current_accrual,
+    #         "next_payout": next_payout,
+    #         "next_accrual": next_accrual
+    #     }
 
 
 

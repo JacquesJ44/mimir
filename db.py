@@ -573,6 +573,7 @@ class DbUtil:
                     SET status='expired',
                         end_date=%s,
                         notes=%s,
+                        payout_hold=1,
                         updated_at=NOW()
                     WHERE circuit_id=%s AND status != 'expired'
                 """, (
@@ -589,19 +590,31 @@ class DbUtil:
             print("Error expiring commission:", e)
             return False
     
-    def update_commission_status(self, commission_id, status):
+    def update_commission_status(self, commission_id, status, payout_hold=None):
         try:
             conn = self.get_connection()
             with conn.cursor() as c:
-                c.execute("""
-                    UPDATE commissions
-                    SET status=%s,
-                        updated_at=NOW()
-                    WHERE id=%s
-                """, (status, commission_id))
+
+                if payout_hold is None:
+                    c.execute("""
+                        UPDATE commissions
+                        SET status=%s,
+                            updated_at=NOW()
+                        WHERE id=%s
+                    """, (status, commission_id))
+                else:
+                    c.execute("""
+                        UPDATE commissions
+                        SET status=%s,
+                            payout_hold=%s,
+                            updated_at=NOW()
+                        WHERE id=%s
+                    """, (status, payout_hold, commission_id))
+
             conn.commit()
             conn.close()
             return True
+
         except Exception as e:
             print("Error updating commission status:", e)
             return False
@@ -861,6 +874,7 @@ class DbUtil:
                     JOIN circuits cir ON c.circuit_id = cir.id
                     WHERE c.id = %s
                     AND c.status = 'active'
+                    AND c.payout_hold = 0
                 """, (commission_id,))
 
                 row = c.fetchone()

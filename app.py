@@ -44,6 +44,7 @@ UPLOAD_FOLDER = './docs'
 ALLOWED_EXTENSIONS = set(['pdf'])
 DECIMAL_PATTERN = re.compile(r'^\d+(\.\d{1,2})?$')
 TZ = ZoneInfo("Africa/Johannesburg")  # SAST timezone
+UTC = ZoneInfo("UTC")  # UTC timezone for consistent storage and calculations
 
 app = Flask(
     __name__,
@@ -895,6 +896,8 @@ def commissions_status():
 
 #=======================================================================================================================================
 
+# COMMISSION AGREEMENT APPROVAL WORKFLOW - WITH PAUSE AND CANCEL BUTTONS
+#=======================================================================================================================================
 @app.route("/api/commissions/apply", methods=["POST"])
 @jwt_required()
 @role_required(['admin', 'sales', 'technician'])
@@ -939,16 +942,21 @@ def apply_commission():
 
         # Create approval token
         token = secrets.token_urlsafe(32)
-        expires_at = datetime.utcnow() + timedelta(minutes=122)
+
+        # Current UTC time
+        now_utc = datetime.now(UTC)
+
+        # Token valid for 7 days
+        expires_at_utc = now_utc + timedelta(days=7)
 
         db.create_commission_approval_token(
             commission_id=commission_id,
             token=token,
-            expires_at=expires_at
+            expires_at=expires_at_utc
         )
 
         # 3️⃣ Indicative values for email only
-        gp = commission["sellingPrice"] - commission["mrc"]
+        gp = Decimal(commission["sellingPrice"]) - Decimal(commission["mrc"])
         indicative_value = (
             gp * (new_percentage / Decimal(100))
         ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -1001,6 +1009,9 @@ def approve_commission():
     if not token_row:
         return "Invalid or expired approval link", 400
 
+    if token_row["used_at"] is not None:
+        return "This approval link has already been used.", 409
+    
     commission = db.get_commission_by_id(token_row["commission_id"])
     if not commission:
         return "Commission not found", 404
@@ -1013,23 +1024,30 @@ def approve_commission():
             "This request can no longer be processed."
         ), 400
     
-    # This is a second safety check for expiry - redundant but important
-    if commission["expires_at"] < datetime.utcnow():
+
+    expires_at = commission["expires_at"]
+
+    # MySQL returns naive datetime → make it UTC aware
+    expires_at_utc = expires_at.replace(tzinfo=UTC)
+
+    now_utc = datetime.now(UTC)
+
+    # Safety expiry check
+    if expires_at_utc < now_utc:
         db.reset_commission(commission["id"])
         return "Approval link expired. Commission reset.", 410
 
     if approve:
-        db.update_commission_status(commission["id"], "active")
+        db.update_commission_status(commission["id"], "active", payout_hold=0)
         gif_url = random.choice(POSITIVE_GIFS)
         title = "Commission Approved"
         message = "The commission has been successfully approved."
     else:
-        db.update_commission_status(commission["id"], "new")
+        db.update_commission_status(commission["id"], "new", payout_hold=0)
         gif_url = random.choice(NEGATIVE_GIFS)
         title = "Commission Rejected"
         message = "The commission has been rejected and reset."
-
-    db.mark_approval_token_used(token)
+        db.mark_approval_token_used(token)
     
     return render_template(
         "commission_result.html",
@@ -1037,6 +1055,110 @@ def approve_commission():
         message=message,
         gif_url=gif_url
     )
+
+#Pause a commission
+@app.route("/api/commissions/pause", methods=["POST"])
+@jwt_required()
+@role_required(['admin', 'finance'])
+def pause_commission():
+    data = request.get_json()
+    commission_id = data.get("commission_id")
+
+    if commission_id is None:
+        return jsonify({"error": "commission_id is required"}), 400
+
+    commission = db.get_commission_by_id(commission_id)
+
+    if not commission:
+        return jsonify({"error": "Commission not found"}), 404
+
+    # SAFEGUARD
+    if commission["status"] != "active":
+        return jsonify({
+            "error": f"Commission cannot be paused in '{commission['status']}' state"
+        }), 400
+
+    try:
+        db.update_commission_status(
+            commission_id=commission_id,
+            status="paused",
+            payout_hold=1
+        )
+
+        return jsonify({"message": "Commission paused successfully"}), 200
+
+    except Exception as e:
+        print("Error pausing commission:", e)
+        return jsonify({"error": "Failed to pause commission"}), 500
+
+@app.route("/api/commissions/resume", methods=["POST"])
+@jwt_required()
+@role_required(['admin', 'finance'])
+def resume_commission():
+    data = request.get_json()
+    commission_id = data.get("commission_id")
+
+    if commission_id is None:
+        return jsonify({"error": "commission_id is required"}), 400
+
+    commission = db.get_commission_by_id(commission_id)
+
+    if not commission:
+        return jsonify({"error": "Commission not found"}), 404
+
+    # SAFEGUARD
+    if commission["status"] != "paused":
+        return jsonify({
+            "error": f"Commission cannot be resumed in '{commission['status']}' state"
+        }), 400
+
+    try:
+        db.update_commission_status(
+            commission_id=commission_id,
+            status="active",
+            payout_hold=0
+        )
+
+        return jsonify({"message": "Commission resumed successfully"}), 200
+
+    except Exception as e:
+        print("Error resuming commission:", e)
+        return jsonify({"error": "Failed to resume commission"}), 500
+    
+@app.route("/api/commissions/cancel", methods=["POST"])
+@jwt_required()
+@role_required(['admin', 'finance'])
+def cancel_commission():
+    data = request.get_json()
+    commission_id = data.get("commission_id")
+
+    if commission_id is None:
+        return jsonify({"error": "commission_id is required"}), 400
+
+    commission = db.get_commission_by_id(commission_id)
+
+    if not commission:
+        return jsonify({"error": "Commission not found"}), 404
+
+    # SAFEGUARD
+    if commission["status"] in ("completed", "expired"):
+        return jsonify({
+            "error": f"Commission cannot be cancelled in '{commission['status']}' state"
+        }), 400
+
+    try:
+        db.update_commission_status(
+            commission_id=commission_id,
+            status="expired",
+            payout_hold=1
+        )
+
+        return jsonify({"message": "Commission cancelled successfully"}), 200
+
+    except Exception as e:
+        print("Error cancelling commission:", e)
+        return jsonify({"error": "Failed to cancel commission"}), 500
+
 
 #====================================================================================================================================================
 # On the Commissions.jsx component there are 4 views. These are the endpoints for these views.
@@ -1157,23 +1279,6 @@ def commissions_paid_summary():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-    
-# @app.route("/commissions/pay_all", methods=["POST"])
-# @jwt_required()
-# @role_required(['admin', 'finance'])
-# def pay_all_commissions():
-#     data = request.json
-#     user_id = data.get("user_id")
-#     pay_date = data.get("pay_date")
-
-#     if not user_id or not pay_date:
-#         return {"status": "error", "message": "user_id and pay_date required"}, 400
-
-#     result = db.pay_all_pending_for_user(user_id, pay_date)
-
-#     return result
-
 
 
 # Serve React frontend

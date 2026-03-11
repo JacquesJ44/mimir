@@ -68,6 +68,7 @@ def run_monthly_commission_accrual(year: int, month: int):
             SELECT id
             FROM commissions
             WHERE status = 'active'
+              AND payout_hold = 0
               AND start_date <= %s
               AND (end_date IS NULL OR end_date >= %s)
         """, (
