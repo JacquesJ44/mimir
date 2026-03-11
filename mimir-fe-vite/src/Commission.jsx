@@ -85,6 +85,22 @@ const Commissions = () => {
     }
   };
   
+
+  // COMMISSION AGREEMENT ACTION BUTTONS====================================================================================
+  const commissionActions = {
+    new: ["apply", "cancel"],
+    pending: ["cancel"],
+    active: ["pause", "cancel"],
+    paused: ["resume", "cancel"],
+    expired: [],
+    completed: []
+  };
+
+  const can = (status, action) => commissionActions[status]?.includes(action);
+
+  const [pauseButtonLoading, setPauseButtonLoading] = useState(false);
+  const [resumeButtonLoading, setResumeButtonLoading] = useState(false);
+
   // Apply commission changes for a specific commission ID
   const applyCommission = async (commissionId) => {
     // Get the commission percentage from edited state or default to 10
@@ -123,6 +139,87 @@ const Commissions = () => {
       setApplyButtonLoading(false);
     }
   };
+
+  // Pause a commission agreement for a specific commission ID
+  const pauseCommissionAgreement = async (commissionId) => {
+    try {
+      setPauseButtonLoading(true);
+
+      const res = await axios.post(
+        "/api/commissions/pause",
+        { commission_id: commissionId }, // ✅ use snake_case for consistency with your apply payload
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      console.log("Response from server (pause):", res.data);
+      alert("Commission agreement has been paused.");
+
+      // Refresh list after user acknowledges the alert
+      await fetchCommissions();
+    } catch (err) {
+      console.error("Error pausing commission agreement:", err.response?.data || err);
+      alert("Failed to pause the commission agreement.");
+    } finally {
+      setPauseButtonLoading(false);
+    }
+  };
+
+  const resumeCommissionAgreement = async (commissionId) => {
+    try {
+      setResumeButtonLoading(true);
+
+      const res = await axios.post(
+        "/api/commissions/resume",
+        { commission_id: commissionId }, // ✅ use snake_case for consistency with your apply payload
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      console.log("Response from server (resume):", res.data);
+      alert("Commission agreement has been resumed.");
+
+      // Refresh list after user acknowledges the alert
+      await fetchCommissions();
+    } catch (err) {
+      console.error("Error resuming commission agreement:", err.response?.data || err);
+      alert("Failed to resume the commission agreement.");
+    } finally {
+      setResumeButtonLoading(false);
+    }
+  };
+
+  const cancelCommissionAgreement = async (commissionId) => {
+    try {
+      const res = await axios.post(
+        "/api/commissions/cancel",
+        { commission_id: commissionId }, // ✅ use snake_case for consistency with your apply payload
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      console.log("Response from server (cancel):", res.data);
+      alert("Commission agreement has been canceled.");
+
+      // Refresh list after user acknowledges the alert
+      await fetchCommissions();
+    } catch (err) {
+      console.error("Error canceling commission agreement:", err.response?.data || err);
+      alert("Failed to cancel the commission agreement.");
+    } 
+  };
+
+  
+//===========================================================================================================================
   
   // Display earnings summary in Earned view
   const [earnings, setEarnings] = useState([]);
@@ -194,6 +291,8 @@ const Commissions = () => {
     }
   };
 
+
+  // FILTER SETTINGS ==========================================================================================================================
   const canFilterBySalesPerson =
   userRole === "admin" || userRole === "finance";
 
@@ -376,26 +475,6 @@ const Commissions = () => {
 
 //===========================================================================================================================
   
-  // const payAllForUser = async (userId) => {
-  //   if (!window.confirm("Pay all pending commissions for this user?")) return;
-
-  //   try {
-  //     setPayingUserId(userId);
-
-  //     await axios.post("/api/commissions/pay_all", {
-  //       user_id: userId,
-  //       pay_date: new Date().toISOString().slice(0, 10)
-  //     });
-
-  //     await fetchPayoutSummary();
-  //   } catch (err) {
-  //     console.error("Payment failed", err);
-  //     alert("Payment failed");
-  //   } finally {
-  //     setPayingUserId(null);
-  //   }
-  // };
-
   useEffect(() => {
     setLoading(true);
     setError(null);
@@ -464,6 +543,11 @@ const Commissions = () => {
 
   const filteredPayouts =
     filterByMonthYearAndSalesperson(payouts, "period_end");
+
+  
+
+
+  // COMMISSION ENTRY ACTION BUTTONS
 
   
   return (
@@ -637,7 +721,7 @@ const Commissions = () => {
                       const percentage = editedCommissions[commissionId]?.commission_percentage ?? c.commission_percentage ?? 10;
                       const gp = c.mrc != null && c.sellingPrice != null ? Number(c.sellingPrice) - Number(c.mrc) : 0;
                       const commissionValue = gp * (percentage / 100);
-                      const isExpired = c.status !== 'new' && c.status !== 'paused';
+                      const isPercentageEditable = c.status === "new";
 
                       return (
                         <React.Fragment key={commissionId}>
@@ -663,7 +747,7 @@ const Commissions = () => {
                                 max="100"
                                 className="input input-sm input-bordered w-20"
                                 value={percentage}
-                                disabled={isExpired}
+                                disabled={!isPercentageEditable}
                                 onChange={(e) =>
                                   setEditedCommissions((prev) => ({
                                     ...prev,
@@ -682,13 +766,73 @@ const Commissions = () => {
                               </span>
                             </td>
                             <td>
-                              <button
-                                className="btn btn-xs btn-accent"
-                                disabled={isExpired || applyButtonLoading}
-                                onClick={() => applyCommission(commissionId)}
-                              >
-                                {applyButtonLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Apply"}
-                              </button>
+                              {["admin", "finance"].includes(userRole) ? (
+                                <div className="dropdown dropdown-end">
+                                  <label tabIndex={0} className="btn btn-xs btn-accent">
+                                    Actions
+                                  </label>
+                                  <ul tabIndex={0} className="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-40">
+                                    {/* Map over all possible actions for this commission */}
+                                    {["apply", "pause", "resume", "cancel"].map(action => {
+                                      if (!can(c.status, action)) return null; // skip if not allowed
+
+                                      // Determine loading state per action
+                                      let isLoading = false;
+                                      switch (action) {
+                                        case "apply":
+                                          isLoading = applyButtonLoading;
+                                          break;
+                                        case "pause":
+                                          isLoading = pauseButtonLoading;
+                                          break;
+                                        case "resume":
+                                          isLoading = resumeButtonLoading;
+                                          break;
+                                        default:
+                                          isLoading = false;
+                                      }
+
+                                      // Map action to handler function
+                                      const handlerMap = {
+                                        apply: () => applyCommission(commissionId),
+                                        pause: () => pauseCommissionAgreement(commissionId),
+                                        resume: () => resumeCommissionAgreement(commissionId),
+                                        cancel: () => cancelCommissionAgreement(commissionId),
+                                      };
+
+                                      return (
+                                        <li key={action}>
+                                          <button
+                                            disabled={isLoading}
+                                            onClick={handlerMap[action]}
+                                          >
+                                            {isLoading ? (
+                                              <Loader2 className={`w-4 h-4 animate-spin ${action === "apply" ? "w-5 h-5" : ""}`} />
+                                            ) : (
+                                              action.charAt(0).toUpperCase() + action.slice(1)
+                                            )}
+                                          </button>
+                                        </li>
+                                      );
+                                    })}
+                                  </ul>
+                                </div>
+                              ) : (
+                                // Non-admin: only show Apply if allowed
+                                can(c.status, "apply") && (
+                                  <button
+                                    className="btn btn-xs btn-accent"
+                                    disabled={applyButtonLoading}
+                                    onClick={() => applyCommission(commissionId)}
+                                  >
+                                    {applyButtonLoading ? (
+                                      <Loader2 className="w-5 h-5 animate-spin" />
+                                    ) : (
+                                      "Apply"
+                                    )}
+                                  </button>
+                                )
+                              )}
                             </td>
                           </tr>
 
@@ -702,15 +846,21 @@ const Commissions = () => {
                                   </div>
                                   <div>
                                     <span className="font-semibold">Effective Date:</span>
-                                    <div>{c.start_date ? new Date(c.start_date).toLocaleDateString() : "-"}</div>
+                                    <div>{c.start_date ? new Date(c.start_date).toLocaleDateString(
+                                      "en-GB", {day: "2-digit", month: "short", year: "numeric"}) : "-"}
+                                    </div>
                                   </div>
                                   <div>
                                     <span className="font-semibold">Created:</span>
-                                    <div>{c.created_at ? new Date(c.created_at).toLocaleDateString() : "-"}</div>
+                                    <div>{c.created_at ? new Date(c.created_at).toLocaleDateString(
+                                      "en-GB", {day: "2-digit", month: "short", year: "numeric"}) : "-"}
+                                    </div>
                                   </div>
                                   <div>
                                     <span className="font-semibold">Updated:</span>
-                                    <div>{c.updated_at ? new Date(c.updated_at).toLocaleDateString() : "-"}</div>
+                                    <div>{c.updated_at ? new Date(c.updated_at).toLocaleDateString(
+                                      "en-GB", {day: "2-digit", month: "short", year: "numeric"}) : "-"}
+                                    </div>
                                   </div>
                                   <div>
                                     <span className="font-semibold">Notes:</span>
