@@ -48,6 +48,7 @@ const Commissions = () => {
     cancelled: "bg-yellow-100 text-yellow-800",
     expired: "bg-gray-300 text-gray-600",
     pending: "bg-orange-100 text-orange-800",
+    reversed: "bg-red-100 text-red-800",
   };
   
   const toggleRow = (id) => {
@@ -126,7 +127,7 @@ const Commissions = () => {
         }
       );
 
-      console.log("Response from server:", res.data);
+      // console.log("Response from server:", res.data);
       alert("Commission submitted for approval");
 
       // ✅ This runs AFTER user clicks OK
@@ -155,7 +156,7 @@ const Commissions = () => {
         }
       );
 
-      console.log("Response from server (pause):", res.data);
+      // console.log("Response from server (pause):", res.data);
       alert("Commission agreement has been paused.");
 
       // Refresh list after user acknowledges the alert
@@ -182,7 +183,7 @@ const Commissions = () => {
         }
       );
 
-      console.log("Response from server (resume):", res.data);
+      // console.log("Response from server (resume):", res.data);
       alert("Commission agreement has been resumed.");
 
       // Refresh list after user acknowledges the alert
@@ -196,6 +197,11 @@ const Commissions = () => {
   };
 
   const cancelCommissionAgreement = async (commissionId) => {
+
+    if (!window.confirm("Cancelling a commission agreement will exclude it from all future accruals/payments. Are you sure?")) {
+      return;
+    }
+
     try {
       const res = await axios.post(
         "/api/commissions/cancel",
@@ -207,7 +213,7 @@ const Commissions = () => {
         }
       );
 
-      console.log("Response from server (cancel):", res.data);
+      // console.log("Response from server (cancel):", res.data);
       alert("Commission agreement has been canceled.");
 
       // Refresh list after user acknowledges the alert
@@ -220,8 +226,36 @@ const Commissions = () => {
 
   
 //===========================================================================================================================
-  
-  // Display earnings summary in Earned view
+// EARNED VIEW====================================================================================
+//===========================================================================================================================
+ 
+  // Determine if the Pay button should be shown
+  const canPay = (ledger) => {
+    // Example logic: only allow pay if status is 'pending' or 'approved'
+    return ["pending", "approved", "reversed"].includes(ledger.effective_status);
+  };
+
+  // Determine if the Reverse button should be shown
+  const canReverse = (ledger) => {
+    // Example logic: only allow reverse if status is 'paid'
+    return ledger.effective_status === "paid";
+  };
+
+  const getLedgerActions = (ledger) => {
+  const actions = [];
+
+  if (canPay(ledger)) {
+    actions.push({ label: "Pay", type: "pay", disabled: false });
+  }
+
+  if (canReverse(ledger)) {
+    actions.push({ label: "Reverse", type: "reverse", disabled: false });
+  }
+
+  return actions;
+};
+
+// Display earnings summary in Earned view
   const [earnings, setEarnings] = useState([]);
   const fetchEarningsSummary = async () => {
     try {
@@ -232,6 +266,79 @@ const Commissions = () => {
       console.error("Error fetching earnings summary", err);
     }
   };
+
+  // This function is called when the user clicks on the "Pay Entry" or "Reverse Entry" button
+  const handleLedgerEntry = async ({ ledgerId, userId, action }) => {
+  try {
+    if (!["pay", "reverse"].includes(action)) {
+      throw new Error("Invalid action: " + action);
+    }
+
+    // Confirm reversal if needed
+    if (action === "reverse" && !window.confirm("Are you sure you want to reverse this ledger entry?")) {
+      return;
+    }
+
+    // console.log(`${action === "pay" ? "Paying" : "Reversing"} ledger entry:`, { ledgerId, userId });
+
+    const endpoint =
+      action === "pay"
+        ? "/api/commissions/earnings_summary/pay"
+        : "/api/commissions/earnings_summary/reverse";
+
+    const payload =
+      action === "pay"
+        ? {
+            user_id: userId,
+            earned_ledger_ids: [ledgerId],
+            payment_date: new Date().toISOString().slice(0, 10),
+            notes: "Manual payout",
+          }
+        : {
+            user_id: userId,
+            ledger_ids: [ledgerId],
+            reversal_date: new Date().toISOString().slice(0, 10),
+            notes: "Manual reversal",
+          };
+
+    const res = await axios.post(endpoint, payload);
+    
+    // console.log(res);
+
+    // Success
+    if (res.status === 200 && res.data.status === "success") {
+      alert(`${action === "pay" ? "Commission paid" : "Ledger entry reversed"} successfully`);
+    }
+
+    // Partial success
+    else if (res.status === 207 || res.data.status === "partial") {
+      alert(
+        `Partial ${action === "pay" ? "payout" : "reversal"}: ${
+          action === "pay" ? "Paid" : "Reversed"
+        } ${res.data.paid_entries || res.data.reversed_entries}. Failed: ${
+          res.data.failed_entries.join(", ")
+        }`
+      );
+    }
+
+    // Anything else = failure
+    else {
+      alert(`Failed to ${action} ledger entry: ` + (res.data.message || "Unknown error"));
+    }
+
+    // Refresh payouts table
+    await fetchEarningsSummary();
+
+  } catch (err) {
+    console.error(`${action} failed:`, err.response?.data || err);
+
+    if (err.response?.data?.message) {
+      alert(`Failed to ${action} ledger entry: ` + err.response.data.message);
+    } else {
+      alert(`Failed to ${action} ledger entry: Server error`);
+    }
+  }
+};
 
   // Display paid summary in Payout view
   const [payouts, setPayouts] = useState([]);
@@ -245,51 +352,6 @@ const Commissions = () => {
     }
   };
 
-  const payCommission = async (ledgerId, userId) => {
-    try {
-
-      console.log("Paying commission:", { ledgerId, userId });
-
-      const res = await axios.post("/api/commissions/pay", {
-        user_id: userId,
-        earned_ledger_ids: [ledgerId], // single payout
-        payment_date: new Date().toISOString().slice(0, 10),
-        notes: "Manual payout"
-      });
-
-      // Success
-      if (res.status === 200 && res.data.status === "success") {
-        alert("Commission paid successfully");
-      }
-
-      // Partial success
-      else if (res.status === 207 || res.data.status === "partial") {
-        alert(
-          `Partial payout: Paid ${res.data.paid_entries}. Failed: ${res.data.failed_entries.join(
-            ", "
-          )}`
-        );
-      }
-
-      // Anything else = failure
-      else {
-        alert("Failed to pay commission: " + (res.data.message || "Unknown error"));
-      }
-
-      // Refresh payouts table
-      await fetchEarningsSummary();
-
-    } catch (err) {
-      console.error("Payment failed:", err.response?.data || err);
-
-      // If backend returned a response
-      if (err.response?.data?.message) {
-        alert("Failed to pay commission: " + err.response.data.message);
-      } else {
-        alert("Failed to pay commission: Server error");
-      }
-    }
-  };
 
 
   // FILTER SETTINGS ==========================================================================================================================
@@ -415,35 +477,49 @@ const Commissions = () => {
     setPhase(cycle.phase);
 
     // Debug log: show phase and key dates
-    console.log("DEBUG Frontend Cycle:", {
-      phase: cycle.phase,
-      now: cycle.now,
-      current_payout: cycle.current_payout,
-      current_accrual: cycle.current_accrual,
-      next_payout: cycle.next_payout,
-      next_accrual: cycle.next_accrual
-    });
+    // console.log("DEBUG Frontend Cycle:", {
+    //   phase: cycle.phase,
+    //   now: cycle.now,
+    //   current_payout: cycle.current_payout,
+    //   current_accrual: cycle.current_accrual,
+    //   next_payout: cycle.next_payout,
+    //   next_accrual: cycle.next_accrual
+    // });
 
-    if (intervalRef.current) clearInterval(intervalRef.current);
+    // Always clear previous interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    // Only start timer during COUNTDOWN phase
+    if (cycle.phase !== "COUNTDOWN") {
+      setCountdown("");
+      return;
+    }
 
     intervalRef.current = setInterval(() => {
-      if (cycle.phase === "COUNTDOWN") {
-        const payoutTs = Date.parse(cycle.current_payout);
-        const now = Date.now();
-        const diff = payoutTs - now;
+      const payoutTs = Date.parse(cycle.current_payout);
+      const now = Date.now();
+      const diff = payoutTs - now;
 
-        const d = Math.floor(diff / 86400000);
-        const h = Math.floor((diff / 3600000) % 24);
-        const m = Math.floor((diff / 60000) % 60);
-        const s = Math.floor((diff / 1000) % 60);
-
-        setCountdown(`${d}d ${h}h ${m}m ${s}s`);
-      } else {
-        setCountdown("");
+      if (diff <= 0) {
+        setCountdown("Processing payout...");
+        return;
       }
+
+      const d = Math.floor(diff / 86400000);
+      const h = Math.floor((diff / 3600000) % 24);
+      const m = Math.floor((diff / 60000) % 60);
+      const s = Math.floor((diff / 1000) % 60);
+
+      setCountdown(`${d}d ${h}h ${m}m ${s}s`);
     }, 1000);
 
-    return () => clearInterval(intervalRef.current);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+
   }, [cycle]);
 
   // Get label for display
@@ -544,11 +620,32 @@ const Commissions = () => {
   const filteredPayouts =
     filterByMonthYearAndSalesperson(payouts, "period_end");
 
-  
+  // Displays the total earned commissions for the currently filtered earnings, summing up the commission_value field. This is used in the Earned view summary.
+  const totalEarned = Object.values(
+    filteredEarnings.reduce((acc, e) => {
+      if (!acc[e.id]) acc[e.id] = e
+      return acc
+    }, {})
+  ).reduce((sum, e) => sum + (Number(e.commission_value) || 0), 0)
 
+  // Calculates total paid and reversed commissions from the currently filtered payouts. It iterates through the filtered payouts and sums up the commission_value for entries with status "paid" and "reversed". This is used in the Payouts view summary.
+  const totalsByStatus = filteredPayouts.reduce(
+  (acc, p) => {
+    const value = Number(p.commission_value) || 0;
 
-  // COMMISSION ENTRY ACTION BUTTONS
+    if (p.effective_status === "paid") {
+      acc.paid += value;
+      acc.total += value;   // only paid contributes to total
+    }
 
+    if (p.effective_status === "reversed") {
+      acc.reversed += value;
+    }
+
+    return acc;
+  },
+  { paid: 0, reversed: 0, total: 0 }
+);
   
   return (
     <div className="p-6 bg-base-200 min-h-screen">
@@ -882,88 +979,106 @@ const Commissions = () => {
 
 
         {activeView === "Earned" && (
-          <>
-            <div className="text-center text-base-content">
-              {earnings.length === 0 ? (
-                <p className="text-center text-gray-500">No earnings summary found.</p>
-              ) : (
-                <div className="overflow-auto max-h-150">
-                  <table className="table table-zebra table-auto w-full">
-                    <thead className="sticky top-0 z-10 bg-white dark:bg-gray-800">
-                      <tr>
-                        <th>ID</th>
-                        <th>Salesperson</th>
-                        <th>Circuit Number</th>
-                        <th>Client</th>
-                        <th>Active Days</th>
-                        <th>Period Ending</th>
-                        <th>Entry Type</th>
-                        <th>Commission (R)</th>
-                        <th>Status</th>
-                        {canFilterBySalesPerson && <th>Action</th>}
-                        {/* <th>Actions</th> */}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredEarnings.map((e) => {
-                        return (
-                          <tr key={e.id}>
-                            <td>{e.id}</td>
-                            <td>{e.user_name + " " + e.user_surname || "-"}</td>
-                            <td className="text-right whitespace-nowrap">{e.circuit_number || "-" }</td>
-                            <td className="text-right whitespace-nowrap">{e.client_name || "-" }</td>
-                            <td className="text-right whitespace-nowrap">{e.active_days || "-" }</td>
-                            <td className="text-right whitespace-nowrap">{e.period_end || "-"}</td>
-                            <td className="text-right whitespace-nowrap">{e.entry_type || "-"}</td>
-                            <td className="text-right whitespace-nowrap">
-                              {e.commission_value ? `R${Number(e.commission_value).toFixed(2)}` : "-"}
-                            </td>
-                            <td>
-                              <span className={`badge ${statusColors[e.effective_status]}`}>
-                                {e.effective_status}
-                              </span>
-                            </td>
-                            {canFilterBySalesPerson && (
+          <div className="text-center text-base-content">
+            {earnings.length === 0 ? (
+              <p className="text-center text-gray-500">No earnings summary found.</p>
+            ) : (
+              <div className="overflow-auto max-h-150">
+                <table className="table table-zebra table-auto w-full">
+                  <thead className="sticky top-0 z-10 bg-white dark:bg-gray-800">
+                    <tr>
+                      <th>Agr. ID</th>
+                      <th>Salesperson</th>
+                      <th>Circuit Number</th>
+                      <th>Client</th>
+                      <th>Active Days</th>
+                      <th>Period Ending</th>
+                      <th>Entry Type</th>
+                      <th>Commission (R)</th>
+                      <th>Status</th>
+                      {canFilterBySalesPerson && <th>Action</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredEarnings.map((e) => {
+                      const isReversed = e.effective_status === "reversed";
+                      const commissionValue = isReversed
+                        ? `-R${Number(e.commission_value ?? 0).toFixed(2)}`
+                        : e.commission_value != null
+                        ? `R${Number(e.commission_value).toFixed(2)}`
+                        : "-";
+
+                        const rowKey = `${e.id}-${e.entry_type}-${e.effective_status}`; // ✅ unique
+
+                      return (
+                        <tr key={rowKey}>
+                          <td>{e.commission_id || "-"}</td>
+                          <td>{`${e.user_name || ""} ${e.user_surname || ""}`.trim() || "-"}</td>
+                          <td className="text-right whitespace-nowrap">{e.circuit_number || "-"}</td>
+                          <td className="text-right whitespace-nowrap">{e.client_name || "-"}</td>
+                          <td className="text-right whitespace-nowrap">{e.active_days || "-"}</td>
+                          <td className="text-right whitespace-nowrap">{e.period_end || "-"}</td>
+                          <td className="text-right whitespace-nowrap">
+                            <div className="tooltip tooltip-left" data-tip={`Ledger ID: ${e.id}`}>
+                              <span className="cursor-help">{e.entry_type || "-"}</span>
+                            </div>
+                          </td>
+                          <td className={`text-right whitespace-nowrap ${isReversed ? "text-red-600 font-semibold" : ""}`}>
+                            {commissionValue}
+                          </td>
+                          <td>
+                            <span className={`badge ${statusColors[e.effective_status] || "bg-gray-100 text-gray-800"}`}>
+                              {e.effective_status}
+                            </span>
+                          </td>
+                          {canFilterBySalesPerson && (
                             <td>
                               <div className="dropdown">
-                                <label tabIndex={0} className="btn btn-xs btn-accent">
-                                  Actions
-                                </label>
-                                <ul
-                                  tabIndex={0}
-                                  className="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-32 static"
-                                >
-                                  <li>
-                                    <button
-                                      disabled={e.entry_type !== "earned" || e.raw_status !== "pending"}
-                                      onClick={() => payCommission(e.id, e.user_id)}
-                                    >
-                                      Pay
-                                    </button>
-                                  </li>
-                                  <li>
-                                    <button onClick={() => pauseCommission(commissionId)}>Pause</button>
-                                  </li>
-                                  <li>
-                                    <button onClick={() => reverseCommission(commissionId)}>Reverse</button>
-                                  </li>
-                                  <li>
-                                    <button onClick={() => cancelCommission(commissionId)}>Cancel</button>
-                                  </li>
-                                  {/* Add more options as needed */}
+                                <label tabIndex={0} className="btn btn-xs btn-accent">Actions</label>
+                                <ul tabIndex={0} className="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-32 static">
+                                  {getLedgerActions(e).length === 0 && (
+                                    <li>
+                                      <button disabled>No actions available</button>
+                                    </li>
+                                  )}
+                                  {getLedgerActions(e).map((action, idx) => (
+                                    <li key={`${e.id}-action-${idx}`}> {/* combine ledger id + index for unique keys */}
+                                      <button
+                                        onClick={() =>
+                                          handleLedgerEntry({
+                                            ledgerId: e.id,
+                                            userId: e.user_id,
+                                            action: action.type,
+                                          })
+                                        }
+                                        disabled={action.disabled}
+                                      >
+                                        {action.label}
+                                      </button>
+                                    </li>
+                                  ))}
                                 </ul>
                               </div>
                             </td>
-                            )}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot className="bg-gray-100 dark:bg-gray-700">
+                    <tr className="font-semibold border-t">
+                      <td colSpan="9" className="text-right pr-4">
+                        Total Earned
+                      </td>
+                      <td>
+                        R {totalEarned.toFixed(2)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
         )}
 
               
@@ -991,54 +1106,57 @@ const Commissions = () => {
                     </thead>
                     <tbody>
                       {filteredPayouts.map((p) => {
-                        // Safe helpers
                         const fullName =
                           [p.user_name, p.user_surname].filter(Boolean).join(" ").trim() || "-";
 
+                        const isReversed = p.effective_status === "reversed";
                         const commissionStr =
-                          p?.commission_value !== null &&
-                          p?.commission_value !== undefined &&
-                          !Number.isNaN(Number(p.commission_value))
-                            ? `R${Number(p.commission_value).toFixed(2)}`
+                          p?.commission_value != null && !Number.isNaN(Number(p.commission_value))
+                            ? isReversed
+                              ? `-R${Number(p.commission_value).toFixed(2)}`
+                              : `R${Number(p.commission_value).toFixed(2)}`
                             : "-";
 
-                        const statusClass =
-                          statusColors?.[p.status] ?? "bg-gray-100 text-gray-800";
+                        const statusClass = statusColors?.[p.effective_status] ?? "bg-gray-100 text-gray-800";
+
+                        // ✅ Unique key per row
+                        const rowKey = `${p.id}-${p.entry_type}-${p.effective_status}`;
 
                         return (
-                          <tr key={p.id}>
+                          <tr key={rowKey}>
                             <td>{p.id}</td>
                             <td>{fullName}</td>
-                            <td className="text-right whitespace-nowrap">
-                              {p.circuit_number || "-"}
+                            <td className="text-right whitespace-nowrap">{p.circuit_number || "-"}</td>
+                            <td className="text-right whitespace-nowrap">{p.client_name || "-"}</td>
+                            <td className="text-right whitespace-nowrap">{p.active_days ?? "-"}</td>
+                            <td className="text-right whitespace-nowrap">{p.period_end || "-"}</td>
+                            <td className="text-right whitespace-nowrap">{p.entry_type || "-"}</td>
+                            <td className={`text-right whitespace-nowrap ${isReversed ? "text-red-600 font-semibold" : ""}`}>
+                              {commissionStr}
                             </td>
                             <td className="text-right whitespace-nowrap">
-                              {p.client_name || "-"}
+                              <span className={`badge ${statusClass}`}>{p.effective_status ?? "-"}</span>
                             </td>
-                            <td className="text-right whitespace-nowrap">
-                              {p.active_days ?? "-"}
-                            </td>
-                            <td className="text-right whitespace-nowrap">
-                              {p.period_end || "-"}
-                            </td>
-                            <td className="text-right whitespace-nowrap">
-                              {p.entry_type || "-"}
-                            </td>
-                            <td className="text-right whitespace-nowrap">{commissionStr}</td>
-
-                            {/* ✅ The status badge MUST be inside a <td>, not directly under <tr> */}
-                            <td className="text-right whitespace-nowrap">
-                              <span className={`badge ${statusClass}`}>
-                                {p.status ?? "-"}
-                              </span>
-                            </td>
-
-                            {/* If you want the Actions column later, add another <td> here */}
-                            {/* <td>...actions...</td> */}
                           </tr>
                         );
                       })}
                     </tbody>
+                      <tfoot className="bg-gray-50 font-semibold border-t">
+                        <tr>
+                          <td colSpan="5" className="text-right pr-4">Totals</td>
+                          {/* <td>{filteredPayouts.reduce((sum, p) => sum + (p.active_days || 0), 0)}</td> */}
+                          <td></td>
+                          <td></td>
+                          <td>
+                            <div className="flex flex-col">
+                              <span>Paid: R{totalsByStatus.paid.toFixed(2)}</span>
+                              <span>Reversed: R{totalsByStatus.reversed.toFixed(2)}</span>
+                              <span>Total: R{totalsByStatus.total.toFixed(2)}</span>
+                            </div>
+                          </td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
                   </table>
                 </div>
               )}

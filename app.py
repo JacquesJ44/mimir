@@ -45,6 +45,14 @@ ALLOWED_EXTENSIONS = set(['pdf'])
 DECIMAL_PATTERN = re.compile(r'^\d+(\.\d{1,2})?$')
 TZ = ZoneInfo("Africa/Johannesburg")  # SAST timezone
 UTC = ZoneInfo("UTC")  # UTC timezone for consistent storage and calculations
+REJECTION_REASONS = {
+    "not_eligible": "Circuit not eligible for commission",
+    "duplicate": "Commission already in progress for this circuit",
+    "too_high": "Commission exceeds allowed limits or margin",
+    "pricing": "Pricing does not comply with policy",
+    "contract": "Contract terms do not allow commission",
+    "other": "Other"
+}
 
 app = Flask(
     __name__,
@@ -85,7 +93,11 @@ POSITIVE_GIFS = [
     "https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExbmFxbmU4eG1uNHM3MGVycXl5bjZwMDc5NW90bGY3dmhpbTBndDl1ayZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/a0h7sAqON67nO/giphy.gif",
     "https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExdDhpcHNnbjRveHI3b25vamtzaTJkNGcyNjNuOWRkdm1ubjNzNGFxeiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/pa37AAGzKXoek/giphy.gif",
     "https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExM2kya2lsMmVrN3BmcGdibXA4cGNkNmczN3htMmJzeTZzOTdzbGhmaSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Z2VgDwy1IjJUQ/giphy.gif",
-    "https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHdtb20zd2Fwazl0bm5pZnhjeDM1MDd3ZHE1emRnd2xiemVtZDQ5bCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/QLNdAWrPIqkeNZfgcU/giphy.gif"
+    "https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHdtb20zd2Fwazl0bm5pZnhjeDM1MDd3ZHE1emRnd2xiemVtZDQ5bCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/QLNdAWrPIqkeNZfgcU/giphy.gif",
+    "https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExbms4dTFndzV3b2diamY0MnBlcTkzcnliczRycGdlNjRydWFxYnIzaSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3rgXBxX4myufzT6N2w/giphy.gif",
+    "https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExYnF6dGprOGwzazN2ZzZsaXk2cnBwbzVxZTEwMG9tNG5lOW4zYTdkbSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/gk3R16JhLP8RUka2nD/giphy.gif",
+    "https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExd2x2ZmRneDJzeW1nMnVoZjUzbzhrNXFrM2pnb3hsbG84MWY2NWJzayZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Eyk50nAfYxeH6/giphy.gif",
+    "https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExYWJwb3ZhMTVucGhiZzY5aWpsYngzencyODB0bXd0ZDk4enAzMW95NiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/BPJmthQ3YRwD6QqcVD/giphy.gif"
 ]
 
 NEGATIVE_GIFS = [
@@ -95,6 +107,10 @@ NEGATIVE_GIFS = [
     "https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExaGZ4d2J1ZnJlY2d3dDNvd2hldm5lN3VxaDV5cjZ6OTVxZmphMTJhcSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/aKAyzum9Xe0mGFjc9m/giphy.gif",
     "https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExZTJsOTRpcXU2YmpvZjZqMGR4cmFnbnVnazU2bDF0aHozenVmNHFoMiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/STfLOU6iRBRunMciZv/giphy.gif",
     "https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExeWQ0NnlmMWthNGl0amhydnFiejlmd2Rxa282ZTR6emR2a3BnM2syYyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/GjR6RPcURgiL6/giphy.gif",
+    "https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExYmNzZmF2ejRubmQ0Z2F0ZDM5bjdhamRqeHFneXAyeGd1d2diMWV1ayZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/8II6AI4wn5bFEqhgXM/giphy.gif",
+    "https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExNTJybzBqaml2eGNwaWFhczJkanRxejBnbDN2eDZ4cHNjcTl0MnB1eCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/uQHtUvva9Qljy/giphy.gif",
+    "https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExbTllMWs3MzRrODVxb3g5ZzhtbWhhZ29jczgxbnM5NjZvZDMzZDBjMiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/OhQBBFi64Z81a/giphy.gif",
+    "https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExYXh4YTNnMG1kZmdhNDlydXhrMHQ2dThjOThrY3o2YzAxdXNkZjhubiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/BIN2S0sgQwdeE/giphy.gif"
 ]
 
 # USER BASED ROLES ARE DEFINED AS FOLLOWS:
@@ -680,7 +696,8 @@ def update_circuit(id):
             circuit_changed = (
                 old_data.get('mrc') != data.get('mrc') or
                 old_data.get('sellingPrice') != data.get('sellingPrice') or
-                old_data.get('contractTerm') != data.get('contractTerm')
+                old_data.get('contractTerm') != data.get('contractTerm') or
+                old_data.get('startDate') != data.get('startDate') 
             )
 
             # -----------------------------
@@ -829,11 +846,11 @@ def get_commissions():
             rows = db.get_all_commissions()
         elif role in ('sales', 'technician'):
             rows = db.get_commissions_for_salesperson(user_id)
-            # pprint(rows)
         else:
             # technicians or others see nothing by default
             rows = []
 
+        # pprint(rows)
         return jsonify(rows), 200
 
     except Exception as e:
@@ -895,7 +912,6 @@ def commissions_status():
 
 
 #=======================================================================================================================================
-
 # COMMISSION AGREEMENT APPROVAL WORKFLOW - WITH PAUSE AND CANCEL BUTTONS
 #=======================================================================================================================================
 @app.route("/api/commissions/apply", methods=["POST"])
@@ -962,14 +978,15 @@ def apply_commission():
         ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
         approve_url = (
-        f"{os.getenv('APP_BASE_URL')}"
-        f"/api/commissions/approve?token={token}&approve=true"
+            f"{os.getenv('APP_BASE_URL')}/api/commissions/approve?token={token}&approve=true"
         )
-        reject_url = (
-            f"{os.getenv('APP_BASE_URL')}"
-            f"/api/commissions/approve?token={token}&approve=false"
-        )
-
+         # Generate reject links
+        reject_links = {
+            key: f"{os.getenv('APP_BASE_URL')}/api/commissions/approve?token={token}&approve=false&reason={key}"
+            for key in REJECTION_REASONS
+        }
+        
+        # 4️⃣ Send email to manager
         msg = Message(
             subject=f"Commission Approval Request - ID {commission_id}",
             sender=os.getenv("MAIL_DEFAULT_SENDER"),
@@ -985,7 +1002,8 @@ def apply_commission():
                 months=commission["contractTerm"],
                 notes=commission["notes"],
                 approve_url=approve_url,
-                reject_url=reject_url
+                reject_links=reject_links,
+                rejection_reasons=REJECTION_REASONS
             )
         )
 
@@ -1001,42 +1019,44 @@ def apply_commission():
 def approve_commission():
     token = request.args.get("token")
     approve = request.args.get("approve") == "true"
+    reason_key = request.args.get("reason")  # only for rejects
 
     if not token:
         return "Missing approval token", 400
 
+    # Fetch token row and validate
     token_row = db.get_valid_approval_token(token)
     if not token_row:
         return "Invalid or expired approval link", 400
 
     if token_row["used_at"] is not None:
         return "This approval link has already been used.", 409
-    
+
     commission = db.get_commission_by_id(token_row["commission_id"])
     if not commission:
         return "Commission not found", 404
-    
-    # pprint(commission)
 
     if commission["status"] != "pending":
         return (
             f"Invalid commission state '{commission['status']}'. "
             "This request can no longer be processed."
         ), 400
-    
 
-    expires_at = commission["expires_at"]
+    # Expiry check
+    expires_at = commission.get("expires_at")
+    if expires_at:
+        expires_at_utc = expires_at.replace(tzinfo=UTC)
+        now_utc = datetime.now(UTC)
+        if expires_at_utc < now_utc:
+            db.reset_commission(commission["id"])
+            return "Approval link expired. Commission reset.", 410
 
-    # MySQL returns naive datetime → make it UTC aware
-    expires_at_utc = expires_at.replace(tzinfo=UTC)
+    # Determine rejection reason if needed
+    reason_text = None
+    if not approve:
+        reason_text = REJECTION_REASONS.get(reason_key, "No reason provided")
 
-    now_utc = datetime.now(UTC)
-
-    # Safety expiry check
-    if expires_at_utc < now_utc:
-        db.reset_commission(commission["id"])
-        return "Approval link expired. Commission reset.", 410
-
+    # Update commission and token
     if approve:
         db.update_commission_status(commission["id"], "active", payout_hold=0)
         gif_url = random.choice(POSITIVE_GIFS)
@@ -1044,11 +1064,32 @@ def approve_commission():
         message = "The commission has been successfully approved."
     else:
         db.update_commission_status(commission["id"], "new", payout_hold=0)
+        db.mark_approval_token_used(token)
         gif_url = random.choice(NEGATIVE_GIFS)
         title = "Commission Rejected"
-        message = "The commission has been rejected and reset."
-        db.mark_approval_token_used(token)
-    
+        message = f"The commission was rejected. Reason: {reason_text}"
+
+    # Send email to salesperson
+    salesperson_email = commission["salesperson_email"]
+    if salesperson_email:  # safeguard
+        notification = Message(
+            subject=f"Commission Application Result - ID {commission['id']}",
+            sender=os.getenv("MAIL_DEFAULT_SENDER"),
+            recipients=[salesperson_email],
+            html=render_template(
+                "commission_result_email.html",
+                approved=approve,
+                gif_url=gif_url,
+                salesperson_name=commission["salesperson_name"],
+                circuit_number=commission["circuitNumber"],
+                client_name=commission["siteB_name"],
+                commission_percentage=commission["commission_percentage"],
+                rejection_reason=reason_text if not approve else None
+            )
+        )
+        mail.send(notification)
+
+    # Render confirmation page for manager
     return render_template(
         "commission_result.html",
         title=title,
@@ -1193,8 +1234,8 @@ def commissions_earnings_summary():
         return jsonify({"error": str(e)}), 500
     
     
-# Called to pay selected commissions, changing the status of the earned entries to 'paid'
-@app.route("/api/commissions/pay", methods=["POST"])
+# Called to pay a commission ledger entry, changing the status of the earned entries to 'paid'
+@app.route("/api/commissions/earnings_summary/pay", methods=["POST"])
 @jwt_required()
 @role_required(["admin", "finance"])
 def pay_commissions():
@@ -1255,6 +1296,66 @@ def pay_commissions():
             "message": str(e)
         }), 400
     
+# Called to reverse selected commission ledger entries, changing their status to 'reversed'
+@app.route("/api/commissions/earnings_summary/reverse", methods=["POST"])
+@jwt_required()
+@role_required(["admin", "finance"])
+def reverse_commissions():
+    data = request.get_json()
+
+    user_id = data.get("user_id")
+    ledger_ids = data.get("ledger_ids", [])
+    reversal_date = date.fromisoformat(
+        data.get("reversal_date", date.today().isoformat())
+    )
+    notes = data.get("notes")
+
+    if not user_id or not ledger_ids:
+        return jsonify({
+            "status": "error",
+            "message": "user_id and ledger_ids are required"
+        }), 400
+
+    reversed_count = 0
+    failed = []
+
+    try:
+        for ledger_id in ledger_ids:
+            success = db.create_commission_reversal_entry(
+                earned_ledger_id=ledger_id,
+                reversal_date=reversal_date,
+                notes=notes
+            )
+
+            if success:
+                reversed_count += 1
+            else:
+                failed.append(ledger_id)
+
+        if not failed:
+            return jsonify({
+                "status": "success",
+                "reversed_entries": reversed_count,
+                "failed_entries": failed,
+                "message": f"Reversed {reversed_count} commission(s) successfully."
+            }), 200
+
+        return jsonify({
+            "status": "partial",
+            "reversed_entries": reversed_count,
+            "failed_entries": failed,
+            "message": f"Reversed {reversed_count} commission(s). Failed: {failed}"
+        }), 207
+
+    except Exception as e:
+        print("Reversal error:", e)
+        return jsonify({
+            "status": "error",
+            "reversed_entries": reversed_count,
+            "failed_entries": failed,
+            "message": str(e)
+        }), 400
+    
 # 2. Pay Commissions View
 @app.route("/api/commissions/payout_summary", methods=["GET"])
 @jwt_required()
@@ -1279,6 +1380,38 @@ def commissions_paid_summary():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+
+@app.route("/preview/commission-approval")
+def preview_commission_approval():
+
+    rejection_reasons = {
+        "margin": "Insufficient margin",
+        "pricing": "Pricing does not align with policy",
+        "contract": "Contract terms not acceptable",
+        "duplicate": "Duplicate commission request",
+        "other": "Other"
+    }
+
+    reject_links = {
+        key: f"/fake/reject/{key}" for key in rejection_reasons
+    }
+
+    return render_template(
+        "commission_approval.html",
+        salesperson_name="Jacques du Toit",
+        circuit_number="CIR-001245",
+        client_name="ACME Corp",
+        gp=350,
+        commission_percentage=12,
+        indicative_value=42,
+        months=24,
+        notes="Customer negotiated long-term deal.",
+        approve_url="/fake/approve",
+        reject_links=reject_links,
+        rejection_reasons=rejection_reasons
+    )
 
 
 # Serve React frontend

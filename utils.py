@@ -63,11 +63,11 @@ class CycleManager:
 # ---------- Anchor constructors ----------
     def _accrual_anchor(self, year: int, month: int) -> datetime:
         # 1st at 02:00 of given month
-        return datetime(year, month, 9, 21, 0, tzinfo=self.TZ)
+        return datetime(year, month, 1, 2, 0, tzinfo=self.TZ)
 
     def _payout_anchor(self, year: int, month: int) -> datetime:
         # 20th at 02:00 of given month
-        return datetime(year, month, 9, 20, 40, tzinfo=self.TZ)
+        return datetime(year, month, 20, 2, 0, tzinfo=self.TZ)
     
 # ---------- Current "window" boundaries for the month of `now` ----------
     def this_month_accrual(self, now: datetime) -> datetime:
@@ -110,70 +110,54 @@ class CycleManager:
         
     
     def commission_status(self):
-        """
-        STATUS rules:
-        - COUNTDOWN: from 1st @ 02:00 (inclusive) to 20th @ 02:00 (exclusive).
-        - WAITING_FOR_ACCRUAL: from 20th @ 02:00 (inclusive) to next 1st @ 02:00 (exclusive).
-        - At exact 02:00 boundaries, the NEW status applies immediately.
-        """
         now = self.now()
-        # Anchors for the month of `now`
-        accrual = self.this_month_accrual(now)       # 1st @ 02:00 this month
-        payout = self.this_month_payout(now)         # 20th @ 02:00 this month
-        next_accrual = accrual + relativedelta(months=1)
-        next_payout  = payout  + relativedelta(months=1)
 
-            
-# Determine status region and "current/next" dates perspective
-        if now < accrual:
-            # We're BEFORE this month's accrual → still waiting for accrual window
-            # Interval: (last payout @20th 02:00) → [this accrual @1st 02:00)
-            status = "WAITING_FOR_ACCRUAL"
-            current_accrual = accrual
-            current_payout  = (payout - relativedelta(months=1))  # last payout
-            # Upcoming boundaries after this window:
-            next_accrual = accrual                                 # same as current_accrual
-            next_payout  = payout
+        # anchors for this month
+        accrual_this = self._accrual_anchor(now.year, now.month)
+        payout_this = self._payout_anchor(now.year, now.month)
 
-        elif accrual <= now < payout:
-            # Between 1st @02:00 and 20th @02:00 → COUNTDOWN window
-            status = "COUNTDOWN"
-            current_accrual = accrual
-            current_payout  = payout
-            # Upcoming boundaries:
-            next_accrual = accrual + relativedelta(months=1)
-            next_payout  = payout  + relativedelta(months=1)
+        # previous month anchors
+        accrual_prev = accrual_this - relativedelta(months=1)
+        payout_prev = payout_this - relativedelta(months=1)
 
+        # next month anchors
+        accrual_next = accrual_this + relativedelta(months=1)
+        payout_next = payout_this + relativedelta(months=1)
+
+        # Determine most recent accrual
+        if now >= accrual_this:
+            last_accrual = accrual_this
+            next_accrual = accrual_next
         else:
-            # now >= payout (i.e., from 20th @02:00 up to next 1st @02:00)
-            status = "WAITING_FOR_ACCRUAL"
-            current_accrual = next_accrual            # next accrual is the one we're waiting for
-            current_payout  = payout                  # the payout that just happened (or is happening)
-            # Upcoming boundaries after this window:
-            next_payout  = payout + relativedelta(months=1)
-            next_accrual = current_accrual + relativedelta(months=1)
+            last_accrual = accrual_prev
+            next_accrual = accrual_this
 
-        pprint("DEBUG:")
-        for key, value in {
+        # Determine most recent payout
+        if now >= payout_this:
+            last_payout = payout_this
+            next_payout = payout_next
+        else:
+            last_payout = payout_prev
+            next_payout = payout_this
+
+        # Phase depends on which event happened last
+        if last_accrual > last_payout:
+            status = "COUNTDOWN"
+            current_accrual = last_accrual
+            current_payout = next_payout
+        else:
+            status = "WAITING_FOR_ACCRUAL"
+            current_accrual = next_accrual
+            current_payout = last_payout
+
+        return {
             "status": status,
             "now": now,
-            "accrual": accrual,
-            "payout": payout,
-            "next_accrual": next_accrual,
-            "next_payout": next_payout,
+            "current_payout": current_payout,
             "current_accrual": current_accrual,
-            "current_payout": current_payout
-        }.items():
-            pprint(f"  {key}: {value}")
-        
-        return {
-                    "status": status,
-                    "now": now,
-                    "current_payout": current_payout,
-                    "current_accrual": current_accrual,
-                    "next_payout": next_payout,
-                    "next_accrual": next_accrual
-                }
+            "next_payout": next_payout,
+            "next_accrual": next_accrual
+        }
 
 
 
