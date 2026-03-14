@@ -131,14 +131,50 @@
     <p>Please review the commission and <strong>approve or reject</strong> as appropriate:</p>
     <p>This link is valid for <strong>7 days</strong>.</p>
 
-    <p>
-      <a href="{{ approve_url }}" class="btn-approve">Approve</a>
-      &nbsp;
-      <a href="{{ reject_url }}" class="btn-reject">Reject</a>
-    </p>
+    <div style="text-align:center; margin-top:20px;">
+
+  <!-- Approve button -->
+  <a href="{{ approve_url }}"
+     style="
+       display:inline-block;
+       padding:12px 22px;
+       margin-bottom:20px;
+       background-color:#16a34a;
+       color:white;
+       font-weight:600;
+       font-size:14px;
+       text-decoration:none;
+       border-radius:6px;
+     ">
+      Approve Commission
+  </a>
+
+  <p style="margin:12px 0 6px 0; font-weight:600; color:#334155;">
+    Reject with reason:
+  </p>
+
+  {% for key, label in rejection_reasons.items() %}
+  <a href="{{ reject_links[key] }}"
+     style="
+       display:block;
+       max-width:260px;
+       margin:6px auto;
+       padding:10px;
+       background-color:#ef4444;
+       color:white;
+       font-size:14px;
+       font-weight:500;
+       text-decoration:none;
+       border-radius:6px;
+     ">
+      {{ label }}
+  </a>
+  {% endfor %}
+
+</div>
 
     <div class="footer">
-      This is an automated email from your Commission Management System.
+      This is an automated email from Mimir.
     </div>
   </div>
 </body>

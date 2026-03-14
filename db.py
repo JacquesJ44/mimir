@@ -622,10 +622,10 @@ class DbUtil:
     def get_commission_by_id(self, commission_id):
         """
         Fetch a single commission record by its ID, including:
-        - Salesperson name
-        - Circuit info (circuitNumber, vendor)
-        - Client info (siteB_name)
-        Returns a dict or None if not found.
+        - Salesperson info
+        - Circuit info
+        - Client site info
+        - Latest approval token expiry
         """
         try:
             conn = self.get_connection()
@@ -633,6 +633,7 @@ class DbUtil:
                 cursor.execute("""
                     SELECT 
                         c.*,
+                        u.email AS salesperson_email,
                         CONCAT(u.name, ' ', u.surname) AS salesperson_name,
                         cir.circuitNumber,
                         cir.vendor,
@@ -645,16 +646,35 @@ class DbUtil:
                         siteB.site AS siteB_name,
                         cat.expires_at
                     FROM commissions c
-                    LEFT JOIN users u ON c.salesperson_id = u.id
-                    LEFT JOIN circuits cir ON c.circuit_id = cir.id
-                    LEFT JOIN sites siteA ON cir.siteA = siteA.id
-                    LEFT JOIN sites siteB ON cir.siteB = siteB.id
-                    LEFT JOIN commission_approval_tokens cat ON cat.commission_id = c.id
+                    LEFT JOIN users u 
+                        ON c.salesperson_id = u.id
+                    LEFT JOIN circuits cir 
+                        ON c.circuit_id = cir.id
+                    LEFT JOIN sites siteA 
+                        ON cir.siteA = siteA.id
+                    LEFT JOIN sites siteB 
+                        ON cir.siteB = siteB.id
+                    LEFT JOIN commission_approval_tokens cat 
+                        ON cat.commission_id = c.id
+                        AND cat.id = (
+                            SELECT id
+                            FROM commission_approval_tokens
+                            WHERE commission_id = c.id
+                            ORDER BY created_at DESC
+                            LIMIT 1
+                        )
                     WHERE c.id = %s
                 """, (commission_id,))
+
                 commission = cursor.fetchone()
+
             conn.close()
+
+            if not commission:
+                return None
+
             return commission
+
         except Exception as e:
             print("Error fetching commission:", e)
             return None
@@ -970,7 +990,7 @@ class DbUtil:
                             u.name AS user_name,
                             u.surname AS user_surname,
                             c.circuitNumber,
-                            s.site AS client_name,          
+                            s.site AS client_name,
                             cl.period_start,
                             cl.period_end,
                             cl.gp,
@@ -981,31 +1001,47 @@ class DbUtil:
                             cl.created_at,
                             cl.entry_type,
                             cl.status,
+                            cm.status AS commission_status,
+                            cm.payout_hold,
+
                             CASE
-                                WHEN EXISTS (
-                                    SELECT 1
-                                    FROM commission_ledger p
-                                    WHERE p.entry_type = 'payment'
-                                    AND p.reference_ledger_id = cl.id
-                                    AND p.status = 'paid'
-                                )
-                                THEN 'paid'
+                                WHEN r.id IS NOT NULL THEN 'reversed'
+                                WHEN p.id IS NOT NULL THEN 'paid'
                                 ELSE cl.status
                             END AS effective_status,
+
                             cl.effective_date,
                             cl.notes
+
                         FROM commission_ledger cl
+
+                        LEFT JOIN commission_ledger p
+                            ON p.reference_ledger_id = cl.id
+                            AND p.entry_type = 'payment'
+                            AND p.status = 'paid'
+
+                        LEFT JOIN commission_ledger r
+                            ON r.reference_ledger_id = p.id
+                            AND r.entry_type = 'adjustment'
+                            AND r.status = 'reversed'
+
                         LEFT JOIN users u
                             ON cl.user_id = u.id
+
                         LEFT JOIN commissions cm
                             ON cl.commission_id = cm.id
+
                         LEFT JOIN circuits c
                             ON cm.circuit_id = c.id
+
                         LEFT JOIN sites s
                             ON c.siteB = s.id
-                        WHERE cl.user_id = %s
-                        AND cl.entry_type = 'earned'
-                        ORDER BY cl.period_start DESC;
+
+
+                        WHERE cl.entry_type = 'earned'
+                        AND cl.user_id = %s
+
+                        ORDER BY cl.period_start DESC
                     """
                     c.execute(sql, (user_id,))
                 else:
@@ -1017,7 +1053,7 @@ class DbUtil:
                                 u.name AS user_name,
                                 u.surname AS user_surname,
                                 c.circuitNumber,
-                                s.site AS client_name,    
+                                s.site AS client_name,
                                 cl.period_start,
                                 cl.period_end,
                                 cl.gp,
@@ -1028,17 +1064,12 @@ class DbUtil:
                                 cl.created_at,
                                 cl.entry_type,
                                 cl.status,
+                                cm.status AS commission_status,
+                                cm.payout_hold,
 
-                                /* ✅ Effective status override */
                                 CASE
-                                    WHEN EXISTS (
-                                        SELECT 1
-                                        FROM commission_ledger p
-                                        WHERE p.entry_type = 'payment'
-                                        AND p.reference_ledger_id = cl.id
-                                        AND p.status = 'paid'
-                                    )
-                                    THEN 'paid'
+                                    WHEN r.id IS NOT NULL THEN 'reversed'
+                                    WHEN p.id IS NOT NULL THEN 'paid'
                                     ELSE cl.status
                                 END AS effective_status,
 
@@ -1046,17 +1077,32 @@ class DbUtil:
                                 cl.notes
 
                             FROM commission_ledger cl
+
+                            LEFT JOIN commission_ledger p
+                                ON p.reference_ledger_id = cl.id
+                                AND p.entry_type = 'payment'
+                                AND p.status = 'paid'
+
+                            LEFT JOIN commission_ledger r
+                                ON r.reference_ledger_id = p.id
+                                AND r.entry_type = 'adjustment'
+                                AND r.status = 'reversed'
+
                             LEFT JOIN users u
                                 ON cl.user_id = u.id
+
                             LEFT JOIN commissions cm
                                 ON cl.commission_id = cm.id
+
                             LEFT JOIN circuits c
                                 ON cm.circuit_id = c.id
+
                             LEFT JOIN sites s
                                 ON c.siteB = s.id
 
                             WHERE cl.entry_type = 'earned'
-                            ORDER BY cl.period_start DESC;
+
+                            ORDER BY cl.period_start DESC
                         """
 
                     c.execute(sql)
@@ -1085,6 +1131,8 @@ class DbUtil:
                         "entry_type": row["entry_type"],
                         "raw_status": row["status"],
                         "effective_status": row["effective_status"],
+                        "commission_status": row["commission_status"], 
+                        "payout_hold": row["payout_hold"], 
                         "effective_date": str(row["effective_date"]),
                         "notes": row["notes"],
                     })
@@ -1095,13 +1143,17 @@ class DbUtil:
             raise RuntimeError(f"Database error: {e}")
 
 
-    # Called in /api/commissions/pay - these are manual payments triggered by admin or finance users, not the automated batch payout  
+    # Called in /api/commissions/earnings_summary/pay - these are manual payments triggered by admin or finance users, not the automated batch payout  
     def create_commission_payment_entry(self, earned_ledger_id: int, payment_date: date, notes: str = None) -> bool:
+        """
+        Create a payment ledger entry for an earned commission.
+        Allows repayment if the previous payment was reversed.
+        """
         try:
             conn = self.get_connection()
             with conn.cursor(pymysql.cursors.DictCursor) as c:
 
-                # Fetch earned ledger row
+                # Fetch the earned commission entry
                 c.execute("""
                     SELECT *
                     FROM commission_ledger
@@ -1109,24 +1161,31 @@ class DbUtil:
                     AND entry_type = 'earned'
                     AND status IN ('pending', 'approved')
                 """, (earned_ledger_id,))
-
                 earned = c.fetchone()
                 if not earned:
                     raise ValueError("Earned commission entry not found or not payable")
 
-                # Guard: prevent double payment
+                # Guard: check for existing payment that hasn't been reversed
                 c.execute("""
                     SELECT 1
-                    FROM commission_ledger
-                    WHERE entry_type = 'payment'
-                    AND reference_ledger_id = %s
+                    FROM commission_ledger p
+                    WHERE p.entry_type = 'payment'
+                    AND p.reference_ledger_id = %s
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM commission_ledger r
+                        WHERE r.entry_type = 'adjustment'
+                            AND r.status = 'reversed'
+                            AND r.reference_ledger_id = p.id
+                    )
                     LIMIT 1
                 """, (earned_ledger_id,))
-
                 if c.fetchone():
-                    raise ValueError("Commission already paid")
+                    raise ValueError("Commission already paid and not reversed")
+                else:
+                    print(f"Creating payment for ledger {earned_ledger_id} (repayment after reversal allowed)")
 
-                # Insert payment ledger entry
+                # Insert the new payment ledger entry
                 c.execute("""
                     INSERT INTO commission_ledger (
                         commission_id,
@@ -1170,6 +1229,85 @@ class DbUtil:
             print("Payment entry error:", e)
             return False
         
+    def create_commission_reversal_entry(self, earned_ledger_id: int, reversal_date: date, notes: str = None) -> bool:
+        """
+        Insert a new ledger entry that reverses a paid commission.
+        """
+        try:
+            conn = self.get_connection()
+            with conn.cursor(pymysql.cursors.DictCursor) as c:
+
+                # Fetch the payment ledger row linked to this earned entry
+                c.execute("""
+                    SELECT *
+                    FROM commission_ledger
+                    WHERE reference_ledger_id = %s
+                    AND entry_type = 'payment'
+                    AND status = 'paid'
+                    LIMIT 1
+                """, (earned_ledger_id,))
+
+                paid = c.fetchone()
+                if not paid:
+                    raise ValueError("Payment ledger entry not found or cannot be reversed")
+
+                # Guard: prevent double reversal
+                c.execute("""
+                    SELECT 1
+                    FROM commission_ledger
+                    WHERE reference_ledger_id = %s
+                    AND entry_type = 'adjustment'
+                    AND status = 'reversed'
+                    LIMIT 1
+                """, (paid["id"],))
+
+                if c.fetchone():
+                    raise ValueError("Commission payment has already been reversed")
+
+                # Insert reversal ledger entry
+                c.execute("""
+                    INSERT INTO commission_ledger (
+                        commission_id,
+                        user_id,
+                        period_start,
+                        period_end,
+                        gp,
+                        commission_percentage,
+                        active_days,
+                        days_in_month,
+                        commission_value,
+                        entry_type,
+                        status,
+                        effective_date,
+                        reference_ledger_id,
+                        notes
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        'adjustment', 'reversed', %s, %s, %s
+                    )
+                """, (
+                    paid["commission_id"],
+                    paid["user_id"],
+                    paid["period_start"],
+                    paid["period_end"],
+                    paid["gp"],
+                    paid["commission_percentage"],
+                    paid["active_days"],
+                    paid["days_in_month"],
+                    - paid["commission_value"],
+                    reversal_date,
+                    paid["id"],  # reference to the payment entry
+                    notes
+                ))
+
+            conn.commit()
+            conn.close()
+            return True
+
+        except Exception as e:
+            print("Reversal entry error:", e)
+            return False
+        
     #=============================================================================================================================================
     # BATCH AUTO PAYOUT SUPPORTING FUNCTIONS
     #============================================================================================================================================= 
@@ -1177,17 +1315,52 @@ class DbUtil:
         conn = self.get_connection()
         with conn.cursor(pymysql.cursors.DictCursor) as c:
             c.execute("""
-                SELECT e.id
+                SELECT
+                    e.id,
+                    e.commission_id,
+                    e.user_id,
+                    e.commission_value,
+                    e.active_days,
+                    e.period_end,
+
+                    u.name AS user_name,
+                    u.surname AS user_surname,
+
+                    cir.circuitNumber AS circuit_number,
+                    s.site AS client_name
+
                 FROM commission_ledger e
-                LEFT JOIN commission_ledger p 
-                ON p.reference_ledger_id = e.id 
-                AND p.entry_type = 'payment'
+
+                LEFT JOIN commission_ledger p
+                    ON p.reference_ledger_id = e.id
+                    AND p.entry_type = 'payment'
+
+                JOIN commissions c
+                    ON e.commission_id = c.id
+
+                JOIN circuits cir
+                    ON c.circuit_id = cir.id
+
+                LEFT JOIN sites s
+                    ON cir.siteB = s.id
+
+                LEFT JOIN users u
+                    ON e.user_id = u.id
+
                 WHERE e.entry_type = 'earned'
                 AND YEAR(e.period_end) = %s
                 AND MONTH(e.period_end) = %s
                 AND p.id IS NULL
+
+                AND (
+                    (c.status = 'active' AND c.payout_hold = 0)
+                    OR e.last_earned = 1
+                )
+
+                ORDER BY u.surname, cir.circuitNumber
             """, (year, month))
-            return c.fetchall()
+
+        return c.fetchall()
         
     # This is used in batch_commissions_payout.py to generate the payment entries automatically. This is the opposite of the single, manual payout function above.
     def create_commission_payment_entry_batch(self, earned_ledger_id: int, payment_date: date, payout_batch_id: str, notes: str = None):
@@ -1280,90 +1453,74 @@ class DbUtil:
     # This returns a summary of all PAID commissions, used in payout summary If user_id is provided, filters by that user.
     def get_commissions_paid_summary(self, user_id=None):
         """
-        Return all PAID commission ledger entries.
+        Return all PAID commission ledger entries, including effective_status.
         If user_id is provided, filter by that user.
         """
         try:
             conn = self.get_connection()
             with conn.cursor(pymysql.cursors.DictCursor) as c:
 
-                if user_id:
-                    sql = """
-                        SELECT 
-                            cl.id,
-                            cl.commission_id,
-                            cl.user_id,
-                            u.name AS user_name,
-                            u.surname AS user_surname,
-                            c.circuitNumber,
-                            s.site AS client_name,
-                            cl.period_start,
-                            cl.period_end,
-                            cl.gp,
-                            cl.commission_percentage,
-                            cl.active_days,
-                            cl.days_in_month,
-                            cl.commission_value,
-                            cl.created_at,
-                            cl.entry_type,
-                            cl.status,
-                            cl.effective_date,
-                            cl.notes,
-                            cl.reference_ledger_id
-                        FROM commission_ledger cl
-                        LEFT JOIN users u
-                            ON cl.user_id = u.id
-                        LEFT JOIN commissions cm
-                            ON cl.commission_id = cm.id
-                        LEFT JOIN circuits c
-                            ON cm.circuit_id = c.id
-                        LEFT JOIN sites s
-                            ON c.siteB = s.id
-                        WHERE cl.status = 'paid'
-                        AND cl.user_id = %s
-                        ORDER BY cl.effective_date DESC;
+                user_filter = "AND cl.user_id = %s" if user_id else ""
 
-                    """
+                sql = f"""
+                    SELECT 
+                        cl.id,
+                        cl.commission_id,
+                        cl.user_id,
+                        u.name AS user_name,
+                        u.surname AS user_surname,
+                        c.circuitNumber,
+                        s.site AS client_name,
+                        cl.period_start,
+                        cl.period_end,
+                        cl.gp,
+                        cl.commission_percentage,
+                        cl.active_days,
+                        cl.days_in_month,
+                        cl.commission_value,
+                        cl.created_at,
+                        cl.entry_type,
+                        cl.status AS raw_status,
+                        cl.effective_date,
+                        cl.notes,
+                        cl.reference_ledger_id,
+
+                        /* Effective status override: check for reversed payments */
+                        CASE
+                            WHEN cl.entry_type = 'payment' 
+                                AND EXISTS (
+                                    SELECT 1
+                                    FROM commission_ledger rev
+                                    WHERE rev.entry_type = 'adjustment'
+                                    AND rev.reference_ledger_id = cl.id
+                                    AND rev.status = 'reversed'
+                                )
+                            THEN 'reversed'
+                            ELSE cl.status
+                        END AS effective_status
+
+                    FROM commission_ledger cl
+                    LEFT JOIN users u
+                        ON cl.user_id = u.id
+                    LEFT JOIN commissions cm
+                        ON cl.commission_id = cm.id
+                    LEFT JOIN circuits c
+                        ON cm.circuit_id = c.id
+                    LEFT JOIN sites s
+                        ON c.siteB = s.id
+                    WHERE cl.entry_type = 'payment'
+                    {user_filter}
+                    ORDER BY cl.effective_date DESC;
+                """
+
+                if user_id:
                     c.execute(sql, (user_id,))
                 else:
-                    sql = """
-                        SELECT 
-                            cl.id,
-                            cl.commission_id,
-                            cl.user_id,
-                            u.name AS user_name,
-                            u.surname AS user_surname,
-                            c.circuitNumber,
-                            s.site AS client_name,
-                            cl.period_start,
-                            cl.period_end,
-                            cl.gp,
-                            cl.commission_percentage,
-                            cl.active_days,
-                            cl.days_in_month,
-                            cl.commission_value,
-                            cl.created_at,
-                            cl.entry_type,
-                            cl.status,
-                            cl.effective_date,
-                            cl.notes,
-                            cl.reference_ledger_id
-                        FROM commission_ledger cl
-                        LEFT JOIN users u
-                            ON cl.user_id = u.id
-                        LEFT JOIN commissions cm
-                            ON cl.commission_id = cm.id
-                        LEFT JOIN circuits c
-                            ON cm.circuit_id = c.id
-                        LEFT JOIN sites s
-                            ON c.siteB = s.id
-                        WHERE cl.status = 'paid'
-                        ORDER BY cl.effective_date DESC;
-                    """
                     c.execute(sql)
 
                 rows = c.fetchall()
 
+                # Normalize types
                 summary = []
                 for row in rows:
                     summary.append({
@@ -1380,11 +1537,12 @@ class DbUtil:
                         "commission_percentage": float(row["commission_percentage"]) if row["commission_percentage"] is not None else None,
                         "active_days": row["active_days"],
                         "days_in_month": row["days_in_month"],
-                        "commission_value": float(row["commission_value"]),
+                        "commission_value": float(row["commission_value"]) if row["commission_value"] is not None else 0,
                         "created_at": str(row["created_at"]),
                         "entry_type": row["entry_type"],
-                        "status": row["status"],
-                        "effective_date": str(row["effective_date"]),
+                        "raw_status": row["raw_status"],
+                        "effective_status": row["effective_status"],
+                        "effective_date": str(row["effective_date"]) if row["effective_date"] else None,
                         "notes": row["notes"],
                         "reference_ledger_id": row["reference_ledger_id"],
                     })

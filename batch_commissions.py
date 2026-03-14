@@ -65,7 +65,7 @@ def run_monthly_commission_accrual(year: int, month: int):
     with conn.cursor(pymysql.cursors.DictCursor) as c:
 
         c.execute("""
-            SELECT id
+            SELECT id, end_date
             FROM commissions
             WHERE status = 'active'
               AND payout_hold = 0
@@ -76,19 +76,66 @@ def run_monthly_commission_accrual(year: int, month: int):
             date(year, month, 1)
         ))
 
-        commission_ids = [row['id'] for row in c.fetchall()]
+        commission_rows = c.fetchall()
 
-        logging.info(f"Processing {len(commission_ids)} commissions for {year}-{month:02d}, Commission IDs: {commission_ids}")
+        logging.info(
+            f"Processing {len(commission_rows)} commissions for {year}-{month:02d}"
+        )
 
     conn.close()
 
-    for commission_id in commission_ids:
-        db.create_monthly_commission_ledger_entry(
+    for row in commission_rows:
+        commission_id = row["id"]
+        end_date = row["end_date"]
+
+        created = db.create_monthly_commission_ledger_entry(
             commission_id,
             year,
             month
         )
 
+        # If this was the final accrual month
+        # Only fetch the ledger ID if this is the final accrual month
+        if end_date and end_date.year == year and end_date.month == month:
+            conn = db.get_connection()
+            with conn.cursor(pymysql.cursors.DictCursor) as c:
+                # Get the ledger row for this commission and month
+                c.execute("""
+                    SELECT id
+                    FROM commission_ledger
+                    WHERE commission_id = %s
+                    AND entry_type = 'earned'
+                    AND period_start = %s
+                    AND period_end = %s
+                    ORDER BY id DESC
+                    LIMIT 1
+                """, (
+                    commission_id,
+                    date(year, month, 1),
+                    date(year, month, calendar.monthrange(year, month)[1])
+                ))
+                ledger_row = c.fetchone()
+                if ledger_row:
+                    ledger_id = ledger_row["id"]
+
+                    # Mark last_earned
+                    c.execute("""
+                        UPDATE commission_ledger
+                        SET last_earned = 1
+                        WHERE id = %s
+                    """, (ledger_id,))
+
+                    # Complete the commission
+                    c.execute("""
+                        UPDATE commissions
+                        SET status = 'completed',
+                            payout_hold = 1
+                        WHERE id = %s
+                    """, (commission_id,))
+            conn.commit()
+            conn.close()
+
+            logging.info(f"Commission {commission_id} completed; last earned ledger marked {ledger_id}")
 
 if __name__ == "__main__":
     year, month = get_target_year_month()
