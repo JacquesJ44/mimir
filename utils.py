@@ -3,6 +3,8 @@ import calendar
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from zoneinfo import ZoneInfo
+import pymysql
+from decimal import Decimal
 
 from pprint import pprint
 
@@ -53,6 +55,22 @@ def overlap_days(start1: date, end1: date, start2: date, end2: date) -> int:
 
     return (overlap_end - overlap_start).days + 1
 
+def parse_decimal(value):
+    try:
+        return Decimal(str(value))
+    except:
+        return Decimal('0')
+
+def parse_date(value):
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    return None
+
+#========================================================================================================================================
+##      CYCLE MANAGEMENT FOR COUNTDOWN TIMER AND PHASES                ==================================================================
+#========================================================================================================================================
 class CycleManager:
     def __init__(self, tz):
         self.TZ = tz
@@ -159,80 +177,80 @@ class CycleManager:
             "next_accrual": next_accrual
         }
 
+#========================================================================================================================================
+##      ANALYTICS     ===================================================================================================================
+#========================================================================================================================================
+
+def get_commission_monthly_summary(conn):
+    with conn.cursor(pymysql.cursors.DictCursor) as c:
+        c.execute("""
+            SELECT 
+                DATE_FORMAT(period_end, '%Y-%m') AS month,
+                SUM(CASE WHEN entry_type='earned' THEN commission_value ELSE 0 END) AS earned,
+                SUM(CASE WHEN entry_type='payment' THEN commission_value ELSE 0 END) AS paid
+            FROM commission_ledger
+            GROUP BY month
+            ORDER BY month
+        """)
+        return c.fetchall()
+    
+def get_commission_outstanding(conn):
+    with conn.cursor(pymysql.cursors.DictCursor) as c:
+        c.execute("""
+            SELECT
+                SUM(CASE WHEN entry_type='earned' THEN commission_value ELSE 0 END) -
+                SUM(CASE WHEN entry_type='payment' THEN commission_value ELSE 0 END)
+                AS outstanding
+            FROM commission_ledger
+        """)
+        return c.fetchone()
+    
+def get_commission_pipeline(conn):
+    with conn.cursor(pymysql.cursors.DictCursor) as c:
+        c.execute("""
+            SELECT
+                status,
+                SUM(commission_value) AS total
+            FROM commission_ledger
+            WHERE entry_type = 'earned'
+            GROUP BY status
+        """)
+        return c.fetchall()
+    
+def get_salesperson_commission_totals(conn):
+    with conn.cursor(pymysql.cursors.DictCursor) as c:
+        c.execute("""
+            SELECT
+                u.name,
+                SUM(l.commission_value) AS total_commission
+            FROM commission_ledger l
+            JOIN users u ON l.user_id = u.id
+            WHERE l.entry_type = 'earned'
+            GROUP BY l.user_id
+            ORDER BY total_commission DESC
+        """)
+        return c.fetchall()
+    
+def get_commission_dashboard(conn):
+    from utils import (
+        get_commission_monthly_summary,
+        get_commission_outstanding,
+        get_commission_pipeline,
+        get_salesperson_commission_totals
+    )
+
+    return {
+        "monthly_summary": get_commission_monthly_summary(conn),
+        "outstanding": get_commission_outstanding(conn),
+        "pipeline": get_commission_pipeline(conn),
+        "salespeople": get_salesperson_commission_totals(conn)
+    }
+    
 
 
 
 
-
-
-    # def current_payout_date(self):
-    #     """Return the most recent payout date (20th @ 02:00)."""
-    #     now = self.now()
-    #     this_month = datetime(now.year, now.month, 20, 2, 0, tzinfo=self.TZ)
-    #     if now < this_month:
-    #         # Haven't reached this month's payout yet → use last month's
-    #         return this_month - relativedelta(months=1)
-    #     else:
-    #         # Already passed this month's payout → use this one
-    #         return this_month
-
-    # def next_payout_date(self):
-    #     """Return the next upcoming payout date (20th @ 02:00)."""
-    #     return self.current_payout_date() + relativedelta(months=1)
-
-    # def next_accrual_date(self):
-    #     """Return the next upcoming accrual date (1st @ 02:00)."""
-    #     now = self.now()
-    #     this_month = datetime(now.year, now.month, 1, 2, 0, tzinfo=self.TZ)
-    #     if now < this_month:
-    #         return this_month
-    #     else:
-    #         return this_month + relativedelta(months=1)
-
-    # def commission_status(self):
-    #     now = self.now()
-    #     payout = self.current_payout_date()
-    #     accrual = self.next_accrual_date()
-    #     next_payout = self.next_payout_date()
-    #     next_accrual = accrual + relativedelta(months=1)
-
-    #     if now < payout:
-    #         status = "COUNTDOWN"
-    #         current_payout = payout
-    #         current_accrual = accrual
-
-    #     elif payout <= now < next_accrual:
-    #         status = "WAITING_FOR_ACCRUAL"
-    #         current_payout = payout
-    #         current_accrual = accrual
-
-    #     else:
-    #         # After accrual → roll forward
-    #         status = "COUNTDOWN"
-    #         current_payout = next_payout
-    #         current_accrual = next_accrual
-    #         next_payout = current_payout + relativedelta(months=1)
-    #         next_accrual = current_accrual + relativedelta(months=1)
-
-    #     # print("DEBUG:")
-    #     # for key, value in {
-    #     #     "now": now,
-    #     #     "payout": payout,
-    #     #     "accrual": accrual,
-    #     #     "next_payout": next_payout,
-    #     #     "next_accrual": next_accrual
-    #     # }.items():
-    #     #     print(f"  {key}: {value}")
-
-    #     return {
-    #         "status": status,
-    #         "now": now,
-    #         "current_payout": current_payout,
-    #         "current_accrual": current_accrual,
-    #         "next_payout": next_payout,
-    #         "next_accrual": next_accrual
-    #     }
-
+    
 
 
         

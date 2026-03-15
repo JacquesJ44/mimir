@@ -18,6 +18,7 @@ import Register from './Register.jsx';
 import Dashboard from './Dashboard.jsx';
 import LogsPage from './Logs.jsx';
 import Commission from './Commission.jsx';
+import CommissionDashboard from './CommissionDashboard.jsx';
 
 function App() {
 
@@ -78,6 +79,9 @@ function App() {
                                     
             <Route path='/commission' element={<PrivateRoute>
                                       <Commission />
+                                    </PrivateRoute>} />
+            <Route path='/commission/analytics/dashboard' element={<PrivateRoute>
+                                      <CommissionDashboard />
                                     </PrivateRoute>} />
           </Routes>
         </div> 

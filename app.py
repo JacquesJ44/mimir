@@ -25,7 +25,7 @@ import re
 from pprint import pprint
 
 from db import DbUtil
-from utils import describe_changes_log, CycleManager
+from utils import describe_changes_log, CycleManager, get_commission_dashboard, get_commission_monthly_summary, get_commission_outstanding, get_commission_pipeline, get_salesperson_commission_totals, parse_date, parse_decimal
 
 # Load variables from .env
 load_dotenv()
@@ -214,6 +214,17 @@ def parse_bool(value):
         if v in ("false", "off", "0", "no"):  # treat as False
             return False
     raise ValueError(f"Invalid boolean value: {value!r}")
+
+def has_significant_price_change(old_price, new_price, threshold=10.00):
+    """Returns True if the price changed more than threshold %."""
+    try:
+        old_price = float(old_price)
+        new_price = float(new_price)
+    except (TypeError, ValueError):
+        return False
+    if old_price == 0:
+        return new_price != 0
+    return abs(new_price - old_price) / old_price > threshold
 
 
 #========================================================================================================================
@@ -692,13 +703,16 @@ def update_circuit(id):
             new_salesperson = data.get("salesPerson")
             today = date.today()
 
-            # Flag if key circuit data changed
+            # -----------------------------
+            # Flag only meaningful circuit changes
+            # -----------------------------
             circuit_changed = (
-                old_data.get('mrc') != data.get('mrc') or
-                old_data.get('sellingPrice') != data.get('sellingPrice') or
                 old_data.get('contractTerm') != data.get('contractTerm') or
-                old_data.get('startDate') != data.get('startDate') 
+                parse_date(old_data.get('startDate')) != parse_date(data.get('startDate')) or
+                has_significant_price_change(parse_decimal(old_data.get('mrc')), parse_decimal(data.get('mrc'))) or
+                has_significant_price_change(parse_decimal(old_data.get('sellingPrice')), parse_decimal(data.get('sellingPrice')))
             )
+            
 
             # -----------------------------
             # CASE 1: First salesperson ever assigned
@@ -1380,12 +1394,66 @@ def commissions_paid_summary():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+#3. PROJECTION VIEW - this is the view that shows the projected commissions for the next 12 months based on current active commissions and their end dates.
+@app.route("/api/commissions/analytics/monthly", methods=["GET"])
+@jwt_required()
+@role_required(['admin', 'finance'])
+def commission_monthly_summary():
+    conn = db.get_connection()
+    data = get_commission_monthly_summary(conn)
+    conn.close()
+    return jsonify(data)
 
+@app.route("/api/commissions/analytics/outstanding", methods=["GET"])
+@jwt_required()
+@role_required(['admin', 'finance'])
+def commission_outstanding():
 
+    conn = db.get_connection()
+    data = get_commission_outstanding(conn)
+    conn.close()
 
+    return jsonify(data)
+
+@app.route("/api/commissions/analytics/pipeline", methods=["GET"])
+@jwt_required()
+@role_required(['admin', 'finance'])
+def commission_pipeline():
+
+    conn = db.get_connection()
+    data = get_commission_pipeline(conn)
+    conn.close()
+
+    return jsonify(data)
+
+@app.route("/api/commissions/analytics/sales", methods=["GET"])
+@jwt_required()
+@role_required(['admin', 'finance'])
+def commission_sales():
+
+    conn = db.get_connection()
+    data = get_salesperson_commission_totals(conn)
+    conn.close()
+
+    return jsonify(data)
+
+@app.route("/api/commissions/analytics/dashboard", methods=["GET"])
+@jwt_required()
+@role_required(['admin', 'finance'])
+def commission_dashboard():
+
+    conn = db.get_connection()
+    data = get_commission_dashboard(conn)
+    conn.close()
+
+    return jsonify(data)
+
+# Preview Commission Approval View - this is the page that the manager sees when they click the link in the email to approve or reject a commission agreement. This is a GET route that renders an HTML page with the details of the commission and approve/reject buttons.
 @app.route("/preview/commission-approval")
 def preview_commission_approval():
 
+    
     rejection_reasons = {
         "margin": "Insufficient margin",
         "pricing": "Pricing does not align with policy",
