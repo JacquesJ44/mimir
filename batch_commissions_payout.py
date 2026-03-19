@@ -102,8 +102,9 @@ def run_monthly_commission_auto_payout(year: int, month: int):
         # pprint(paid_entries)
         send_commission_payout_email(paid_entries, year, month, payout_batch_id)
 
-def send_commission_payout_email(summary, year, month, payout_batch_id, recipient="jacquesj44@gmail.com"):
+def send_commission_payout_email(summary, year, month, payout_batch_id):
 
+    recipients=[email.strip() for email in os.getenv("FINANCE_EMAIL").split(",")]
     salespeople = defaultdict(list)
 
     for row in summary:
@@ -242,7 +243,7 @@ def send_commission_payout_email(summary, year, month, payout_batch_id, recipien
     # ---------- EMAIL ----------
     msg = Message(
         subject=f"Commission Payout Report - Batch ID: {payout_batch_id}",
-        recipients=[recipient],
+        recipients=recipients,
         html=html
     )
 
@@ -253,7 +254,7 @@ def send_commission_payout_email(summary, year, month, payout_batch_id, recipien
     )
 
     mail.send(msg)
-    logging.info(f"Commission payout email sent to {recipient}")
+    logging.info(f"Commission payout email sent to {recipients}")
 
 if __name__ == "__main__":
     year, month = get_target_year_month()

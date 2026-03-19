@@ -1,408 +1,185 @@
-// src/pages/Commissions.js
+/**
+ * Commission Dashboard
+ *
+ * A comprehensive commission management system with 4 main views:
+ * - Agreements: View and manage commission agreements
+ * - Earned: Track earned commissions and pay/reverse entries
+ * - Payouts: View paid and reversed commissions
+ * - Projections: (Future view)
+ *
+ * Features:
+ * - Kill switch for auto-payout toggle
+ * - Countdown timer to next payout
+ * - Filtering by month, year, and salesperson (admin/finance only)
+ * - Role-based action permissions
+ *
+ * Structure:
+ * 1. Imports & Constants
+ * 2. State Declarations (grouped by concern)
+ * 3. Effects (grouped by feature)
+ * 4. Helper Utilities & Validators
+ * 5. API Data Fetching
+ * 6. Commission Agreement Actions
+ * 7. Ledger Entry Actions
+ * 8. Auto-Payout Toggle Actions
+ * 9. Computed/Derived Values
+ * 10. Render Logic
+ */
+
+// ============================================================================
+// 1. IMPORTS & CONSTANTS
+// ============================================================================
+
 import React, { useEffect, useState, useRef } from "react";
 import { jwtDecode } from "jwt-decode";
-import axios from "./AxiosInstance"; 
+import axios from "./AxiosInstance";
 import { Loader2 } from "lucide-react";
 
+// Sub-components
+import AgreementsTable from "./components/AgreementsTable";
+import EarningsTable from "./components/EarningsTable";
+import PayoutsTable from "./components/PayoutsTable";
+import CommissionTimelineChart from "./components/CommissionTimeLineChart";
+import StatCard from "./components/StatCard";
+
+/** Available views in the commission dashboard */
+const VIEWS = [
+  { key: "Agreements", label: "Agreements" },
+  { key: "Earned", label: "Earned" },
+  { key: "Payouts", label: "Payouts" },
+  { key: "Projections", label: "Projections" },
+];
+
+/** Status to Tailwind color mapping */
+const STATUS_COLORS = {
+  new: "bg-purple-100 text-purple-800",
+  active: "bg-green-100 text-green-800",
+  paid: "bg-green-100 text-green-800",
+  completed: "bg-blue-100 text-blue-800",
+  paused: "bg-blue-100 text-blue-800",
+  cancelled: "bg-yellow-100 text-yellow-800",
+  expired: "bg-gray-300 text-gray-600",
+  pending: "bg-orange-100 text-orange-800",
+  reversed: "bg-red-100 text-red-800",
+};
+
+/** Commission status → allowed actions mapping */
+const COMMISSION_ACTIONS = {
+  new: ["apply", "cancel"],
+  pending: ["cancel"],
+  active: ["pause", "cancel"],
+  paused: ["resume", "cancel"],
+  expired: [],
+  completed: [],
+};
+
+// ============================================================================
+// 2. COMPONENT & STATE DECLARATIONS
+// ============================================================================
+
 const Commissions = () => {
+  const currentYear = new Date().getFullYear();
+
+  // ========================================================================
+  // STATE: User & Auth
+  // ========================================================================
   const [userRole, setUserRole] = useState(null);
+  const [userIdentifier, setUserIdentifier] = useState({
+    id: null,
+    email: null,
+    name: null,
+  });
+
+  // ========================================================================
+  // STATE: Core Data (one per view)
+  // ========================================================================
   const [commissions, setCommissions] = useState([]);
+  const [earnings, setEarnings] = useState([]);
+  const [payouts, setPayouts] = useState([]);
+
+  // ========================================================================
+  // STATE: UI & View Management
+  // ========================================================================
+  const [activeView, setActiveView] = useState("Agreements");
+  const [expandedRow, setExpandedRow] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  const [editedCommissions, setEditedCommissions] = useState({});
-  const [expandedRow, setExpandedRow] = useState(null);
-  
-  const [applyButtonLoading, setApplyButtonLoading] = useState(false);
-  
-  const [activeView, setActiveView] = useState("Agreements");
 
-  // These are states for filtering by month and year, and per sales person (for 'admin' and 'finance' roles only)
+  // ========================================================================
+  // STATE: Form & Editing
+  // ========================================================================
+  const [editedCommissions, setEditedCommissions] = useState({});
+
+  // ========================================================================
+  // STATE: Filters (Month, Year, Salesperson)
+  // ========================================================================
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
   const [selectedSalesPerson, setSelectedSalesPerson] = useState("");
+  const canFilterBySalesPerson =
+    userRole === "admin" || userRole === "finance";
 
-  const currentYear = new Date().getFullYear();
+  // Projection view selection
+  // Always store as string to keep <select> value consistent
+  const [selectedProjectionCommissionId, setSelectedProjectionCommissionId] = useState("");
 
-  // const [commissionLedger, setCommissionLedger] = useState([]);
+  // ========================================================================
+  // STATE: Button Loading States (Commission Actions)
+  // ========================================================================
+  const [applyButtonLoading, setApplyButtonLoading] = useState(false);
+  const [pauseButtonLoading, setPauseButtonLoading] = useState(false);
+  const [resumeButtonLoading, setResumeButtonLoading] = useState(false);
 
-  // const [payoutWindowReached, setPayoutWindowReached] = useState(false);
+  // ========================================================================
+  // STATE: Kill Switch & Auto-Payout Countdown
+  // ========================================================================
+  const [cycle, setCycle] = useState(null);
+  const [phase, setPhase] = useState(null);
+  const [countdown, setCountdown] = useState("");
+  const [autoPayoutEnabled, setAutoPayoutEnabled] = useState(null);
+  const intervalRef = useRef(null);
 
+  // ============================================================================
+  // 3. EFFECTS
+  // ============================================================================
 
-  // Optional: centralize what views exist so it’s easy to add more later.
-  const views = [
-    { key: "Agreements", label: "Agreements" },
-    { key: "Earned", label: "Earned" },
-    { key: "Payouts", label: "Payouts" },
-    { key: "Projections", label: "Projections" },
-    // Add more as needed
-  ];
-  
-  // Status → Tailwind color mapping
-  const statusColors = {
-    new: "bg-purple-100 text-purple-800",
-    active: "bg-green-100 text-green-800",
-    paid: "bg-green-100 text-green-800",
-    completed: "bg-blue-100 text-blue-800",
-    paused: "bg-blue-100 text-blue-800",
-    cancelled: "bg-yellow-100 text-yellow-800",
-    expired: "bg-gray-300 text-gray-600",
-    pending: "bg-orange-100 text-orange-800",
-    reversed: "bg-red-100 text-red-800",
-  };
-  
-  const toggleRow = (id) => {
-    setExpandedRow(prev => (prev === id ? null : id));
-  };
-
+  // Effect: Initialize user role from JWT token
   useEffect(() => {
-    // 1️⃣ Get user role from token
     const token = localStorage.getItem("token");
     if (token) {
       try {
         const decodedToken = jwtDecode(token);
         setUserRole(decodedToken.role);
+
+        setUserIdentifier({
+          id:
+            decodedToken.user_id ||
+            decodedToken.id ||
+            decodedToken.sub ||
+            null,
+          email: decodedToken.email || decodedToken.username || null,
+          name: decodedToken.name || decodedToken.username || null,
+        });
       } catch (err) {
         console.error("Invalid token:", err);
       }
     }
   }, []);
 
-
-  //===========================================================================================================================
-
-
-  // Fetch ALL commissions from the API and dislay on Agreements view
-  const fetchCommissions = async () => {
-    try {
-      const res = await axios.get("/api/commissions");
-      setCommissions(res.data);
-      // console.log("Fetched commissions:", res.data);
-    } catch (err) {
-      console.error("Error fetching commissions:", err);
-      setError("Failed to load commissions.");
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-
-  // COMMISSION AGREEMENT ACTION BUTTONS====================================================================================
-  const commissionActions = {
-    new: ["apply", "cancel"],
-    pending: ["cancel"],
-    active: ["pause", "cancel"],
-    paused: ["resume", "cancel"],
-    expired: [],
-    completed: []
-  };
-
-  const can = (status, action) => commissionActions[status]?.includes(action);
-
-  const [pauseButtonLoading, setPauseButtonLoading] = useState(false);
-  const [resumeButtonLoading, setResumeButtonLoading] = useState(false);
-
-  // Apply commission changes for a specific commission ID
-  const applyCommission = async (commissionId) => {
-    // Get the commission percentage from edited state or default to 10
-    const commission_percentage =
-      editedCommissions[commissionId]?.commission_percentage ??
-      commissions.find(c => c.id === commissionId)?.commission_percentage ??
-      10;
-
-    // console.log("Submitting commission:", { commissionId, commission_percentage });
-
-    try {
-      setApplyButtonLoading(true);
-      const res = await axios.post(
-        "/api/commissions/apply",
-        {
-          commission_id: commissionId,
-          commission_percentage,
-        },
-        {
-          headers: {
-            "Content-Type": "application/json", // ensure JSON
-          },
-        }
-      );
-
-      // console.log("Response from server:", res.data);
-      alert("Commission submitted for approval");
-
-      // ✅ This runs AFTER user clicks OK
-      await fetchCommissions();
-
-    } catch (err) {
-      console.error("Error submitting commission:", err.response?.data || err);
-      alert("Failed to submit commission");
-    } finally {
-      setApplyButtonLoading(false);
-    }
-  };
-
-  // Pause a commission agreement for a specific commission ID
-  const pauseCommissionAgreement = async (commissionId) => {
-    try {
-      setPauseButtonLoading(true);
-
-      const res = await axios.post(
-        "/api/commissions/pause",
-        { commission_id: commissionId }, // ✅ use snake_case for consistency with your apply payload
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      // console.log("Response from server (pause):", res.data);
-      alert("Commission agreement has been paused.");
-
-      // Refresh list after user acknowledges the alert
-      await fetchCommissions();
-    } catch (err) {
-      console.error("Error pausing commission agreement:", err.response?.data || err);
-      alert("Failed to pause the commission agreement.");
-    } finally {
-      setPauseButtonLoading(false);
-    }
-  };
-
-  const resumeCommissionAgreement = async (commissionId) => {
-    try {
-      setResumeButtonLoading(true);
-
-      const res = await axios.post(
-        "/api/commissions/resume",
-        { commission_id: commissionId }, // ✅ use snake_case for consistency with your apply payload
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      // console.log("Response from server (resume):", res.data);
-      alert("Commission agreement has been resumed.");
-
-      // Refresh list after user acknowledges the alert
-      await fetchCommissions();
-    } catch (err) {
-      console.error("Error resuming commission agreement:", err.response?.data || err);
-      alert("Failed to resume the commission agreement.");
-    } finally {
-      setResumeButtonLoading(false);
-    }
-  };
-
-  const cancelCommissionAgreement = async (commissionId) => {
-
-    if (!window.confirm("Cancelling a commission agreement will exclude it from all future accruals/payments. Are you sure?")) {
-      return;
-    }
-
-    try {
-      const res = await axios.post(
-        "/api/commissions/cancel",
-        { commission_id: commissionId }, // ✅ use snake_case for consistency with your apply payload
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      // console.log("Response from server (cancel):", res.data);
-      alert("Commission agreement has been canceled.");
-
-      // Refresh list after user acknowledges the alert
-      await fetchCommissions();
-    } catch (err) {
-      console.error("Error canceling commission agreement:", err.response?.data || err);
-      alert("Failed to cancel the commission agreement.");
-    } 
-  };
-
-  
-//===========================================================================================================================
-// EARNED VIEW====================================================================================
-//===========================================================================================================================
- 
-  // Determine if the Pay button should be shown
-  const canPay = (ledger) => {
-    // Example logic: only allow pay if status is 'pending' or 'approved'
-    return ["pending", "approved", "reversed"].includes(ledger.effective_status);
-  };
-
-  // Determine if the Reverse button should be shown
-  const canReverse = (ledger) => {
-    // Example logic: only allow reverse if status is 'paid'
-    return ledger.effective_status === "paid";
-  };
-
-  const getLedgerActions = (ledger) => {
-  const actions = [];
-
-  if (canPay(ledger)) {
-    actions.push({ label: "Pay", type: "pay", disabled: false });
-  }
-
-  if (canReverse(ledger)) {
-    actions.push({ label: "Reverse", type: "reverse", disabled: false });
-  }
-
-  return actions;
-};
-
-// Display earnings summary in Earned view
-  const [earnings, setEarnings] = useState([]);
-  const fetchEarningsSummary = async () => {
-    try {
-      const res = await axios.get("/api/commissions/earnings_summary");
-      setEarnings(res.data);
-      // console.log("Fetched earnings summary:", res.data);
-    } catch (err) {
-      console.error("Error fetching earnings summary", err);
-    }
-  };
-
-  // This function is called when the user clicks on the "Pay Entry" or "Reverse Entry" button
-  const handleLedgerEntry = async ({ ledgerId, userId, action }) => {
-  try {
-    if (!["pay", "reverse"].includes(action)) {
-      throw new Error("Invalid action: " + action);
-    }
-
-    // Confirm reversal if needed
-    if (action === "reverse" && !window.confirm("Are you sure you want to reverse this ledger entry?")) {
-      return;
-    }
-
-    // console.log(`${action === "pay" ? "Paying" : "Reversing"} ledger entry:`, { ledgerId, userId });
-
-    const endpoint =
-      action === "pay"
-        ? "/api/commissions/earnings_summary/pay"
-        : "/api/commissions/earnings_summary/reverse";
-
-    const payload =
-      action === "pay"
-        ? {
-            user_id: userId,
-            earned_ledger_ids: [ledgerId],
-            payment_date: new Date().toISOString().slice(0, 10),
-            notes: "Manual payout",
-          }
-        : {
-            user_id: userId,
-            ledger_ids: [ledgerId],
-            reversal_date: new Date().toISOString().slice(0, 10),
-            notes: "Manual reversal",
-          };
-
-    const res = await axios.post(endpoint, payload);
-    
-    // console.log(res);
-
-    // Success
-    if (res.status === 200 && res.data.status === "success") {
-      alert(`${action === "pay" ? "Commission paid" : "Ledger entry reversed"} successfully`);
-    }
-
-    // Partial success
-    else if (res.status === 207 || res.data.status === "partial") {
-      alert(
-        `Partial ${action === "pay" ? "payout" : "reversal"}: ${
-          action === "pay" ? "Paid" : "Reversed"
-        } ${res.data.paid_entries || res.data.reversed_entries}. Failed: ${
-          res.data.failed_entries.join(", ")
-        }`
-      );
-    }
-
-    // Anything else = failure
-    else {
-      alert(`Failed to ${action} ledger entry: ` + (res.data.message || "Unknown error"));
-    }
-
-    // Refresh payouts table
-    await fetchEarningsSummary();
-
-  } catch (err) {
-    console.error(`${action} failed:`, err.response?.data || err);
-
-    if (err.response?.data?.message) {
-      alert(`Failed to ${action} ledger entry: ` + err.response.data.message);
-    } else {
-      alert(`Failed to ${action} ledger entry: Server error`);
-    }
-  }
-};
-
-  // Display paid summary in Payout view
-  const [payouts, setPayouts] = useState([]);
-  const fetchPayoutSummary = async () => {
-    try {
-      const res = await axios.get("/api/commissions/payout_summary");
-      setPayouts(res.data);
-      // console.log("Fetched payout summary:", res.data);
-    } catch (err) {
-      console.error("Error fetching payout summary", err);
-    }
-  };
-
-
-
-  // FILTER SETTINGS ==========================================================================================================================
-  const canFilterBySalesPerson =
-  userRole === "admin" || userRole === "finance";
-
-  const filterByMonthYearAndSalesperson = (records, dateField) => {
-    return records.filter((r) => {
-      if (!r[dateField]) return true;
-
-      const d = new Date(r[dateField]);
-
-      const matchesMonth =
-        selectedMonth === "" || d.getMonth() === Number(selectedMonth);
-
-      const matchesYear =
-        selectedYear === "" || d.getFullYear() === Number(selectedYear);
-
-      const matchesSalesperson =
-      selectedSalesPerson === "" ||
-      r.salesperson_name === selectedSalesPerson ||
-      `${r.user_name ?? ""} ${r.user_surname ?? ""}`.trim() === selectedSalesPerson;
-      
-      return matchesMonth && matchesYear && matchesSalesperson;
-    });
-  };
-  
-  //=====================================================================================================================================
-  // Kill switch state and countdown timer for next auto-payout batch
-  
-  // ---------- Kill Switch and Auto-Payout Cycle ----------
-  const [cycle, setCycle] = useState(null); // holds backend timestamps
-  const [phase, setPhase] = useState(null); // COUNTDOWN | WAITING_FOR_ACCRUAL
-  const [countdown, setCountdown] = useState("");
-  const [autoPayoutEnabled, setAutoPayoutEnabled] = useState(null); // null = loading
-  // const [serverOffset, setServerOffset] = useState(0);
-  // const refreshedRef = useRef(false);
-  
-  // 2️⃣ Fetch kill switch state from backend
+  // Effect: Fetch kill switch state from backend
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
       try {
-        const res = await axios.get("/api/commissions/kill-switch", { withCredentials: true });
+        const res = await axios.get("/api/commissions/kill-switch", {
+          withCredentials: true,
+        });
 
-        // Accept both shapes: { enabled: true } or { autoPayoutEnabled: true }
         const raw =
           res?.data?.enabled ??
           res?.data?.autoPayoutEnabled ??
-          res?.data?.commission_auto_pay; // if you ever return the raw DB field
+          res?.data?.commission_auto_pay;
 
         const enabled =
           typeof raw === "boolean"
@@ -410,81 +187,45 @@ const Commissions = () => {
             : String(raw).toLowerCase() === "true" || raw === "on";
 
         if (!cancelled) setAutoPayoutEnabled(enabled);
-        // console.log("[KILL-PARSED]", { raw, enabled });
       } catch (err) {
         console.error("[KILL-GET][ERROR]", err);
-        if (!cancelled) setAutoPayoutEnabled(prev => prev ?? null); // don't force false
+        if (!cancelled) setAutoPayoutEnabled((prev) => prev ?? null);
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-
-    // Toggle kill switch
-    const toggleAutoPayout = async () => {
-    if (typeof autoPayoutEnabled !== "boolean") return;
-
-    const optimistic = !autoPayoutEnabled;
-    setAutoPayoutEnabled(optimistic);
-
-    try {
-      const res = await axios.post(
-        "/api/commissions/kill-switch",
-        { autoPayoutEnabled: optimistic },
-        { withCredentials: true }
-      );
-      const v = res?.data?.autoPayoutEnabled;
-      const confirmed = typeof v === "boolean" ? v : String(v).toLowerCase() === "true";
-      setAutoPayoutEnabled(confirmed);
-    } catch (err) {
-      console.error("Toggle failed; reverting:", err);
-      setAutoPayoutEnabled(prev => !prev);
-    }
-  };
-
-
-  
-  // FETCH: Cycle status (independent)
+  // Effect: Fetch cycle status (payout timing)
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
       try {
-        const res = await axios.get("/api/commissions/cycle-status", { withCredentials: true });
+        const res = await axios.get("/api/commissions/cycle-status", {
+          withCredentials: true,
+        });
         if (!cancelled) {
           setCycle(res.data ?? null);
-          // setPhase(res.data?.phase ?? null);
-          // setCountdown(res.data?.countdown ?? "");
         }
       } catch (err) {
         console.error("[cycle-status] fetch failed:", err);
-        if (!cancelled) setCycle(prev => prev ?? null);
+        if (!cancelled) setCycle((prev) => prev ?? null);
       }
     })();
-    // console.log("cycle-status fetch initiated", cycle);
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-
-  // Countdown / phase updater
-  const intervalRef = useRef(null);
-
+  // Effect: Update countdown timer and phase based on cycle
   useEffect(() => {
     if (!cycle) return;
 
-    // Always sync phase directly from backend
     setPhase(cycle.phase);
-
-    // Debug log: show phase and key dates
-    // console.log("DEBUG Frontend Cycle:", {
-    //   phase: cycle.phase,
-    //   now: cycle.now,
-    //   current_payout: cycle.current_payout,
-    //   current_accrual: cycle.current_accrual,
-    //   next_payout: cycle.next_payout,
-    //   next_accrual: cycle.next_accrual
-    // });
 
     // Always clear previous interval
     if (intervalRef.current) {
@@ -519,14 +260,122 @@ const Commissions = () => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-
   }, [cycle]);
 
-  // Get label for display
-  // utils: force to boolean if backend ever sends "true"/"false" strings
-  const toBool = (v) =>
-    typeof v === "boolean" ? v : String(v).trim().toLowerCase() === "true";
+  // Effect: Load data based on active view
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
 
+    const load = async () => {
+      try {
+        switch (activeView) {
+          case "Agreements":
+            await fetchCommissions();
+            break;
+          case "Earned":
+            await fetchEarningsSummary();
+            break;
+          case "Payouts":
+            await fetchPayoutSummary();
+            break;
+          case "Projections":
+            // Projections relies on both agreements + payout records
+            await Promise.all([fetchCommissions(), fetchPayoutSummary()]);
+            break;
+          default:
+            break;
+        }
+      } catch (err) {
+        console.error(err);
+        setError("Failed to load data");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    load();
+  }, [activeView]);
+
+  // Effect: Refresh payout data when a different circuit is selected in Projections
+  useEffect(() => {
+    if (activeView !== "Projections") return;
+    if (!selectedProjectionCommissionId) return;
+
+    fetchPayoutSummary();
+  }, [activeView, selectedProjectionCommissionId]);
+
+  // ============================================================================
+  // 4. HELPER UTILITIES & VALIDATORS
+  // ============================================================================
+
+  /**
+   * Check if an action is allowed for a given commission status.
+   */
+  const canPerformAction = (status, action) =>
+    COMMISSION_ACTIONS[status]?.includes(action);
+
+  /**
+   * Determine if a ledger entry can be paid
+   */
+  const canPay = (ledger) =>
+    ["pending", "approved", "reversed"].includes(ledger.effective_status);
+
+  /**
+   * Determine if a ledger entry can be reversed
+   */
+  const canReverse = (ledger) => ledger.effective_status === "paid";
+
+  /**
+   * Get available actions for a ledger entry
+   */
+  const getLedgerActions = (ledger) => {
+    const actions = [];
+    if (canPay(ledger)) {
+      actions.push({ label: "Pay", type: "pay", disabled: false });
+    }
+    if (canReverse(ledger)) {
+      actions.push({ label: "Reverse", type: "reverse", disabled: false });
+    }
+    return actions;
+  };
+
+  /**
+   * Convert various value types to boolean
+   */
+  const toBool = (v) =>
+    typeof v === "boolean"
+      ? v
+      : String(v).trim().toLowerCase() === "true";
+
+  /**
+   * Filter records by month, year, and salesperson
+   */
+  const filterByMonthYearAndSalesperson = (records, dateField) => {
+    return records.filter((r) => {
+      if (!r[dateField]) return true;
+
+      const d = new Date(r[dateField]);
+
+      const matchesMonth =
+        selectedMonth === "" || d.getMonth() === Number(selectedMonth);
+
+      const matchesYear =
+        selectedYear === "" || d.getFullYear() === Number(selectedYear);
+
+      const matchesSalesperson =
+        selectedSalesPerson === "" ||
+        r.salesperson_name === selectedSalesPerson ||
+        `${r.user_name ?? ""} ${r.user_surname ?? ""}`.trim() ===
+          selectedSalesPerson;
+
+      return matchesMonth && matchesYear && matchesSalesperson;
+    });
+  };
+
+  /**
+   * Generate countdown label for the kill switch panel
+   */
   const getCountdownLabel = () => {
     if (autoPayoutEnabled === null || phase === null) {
       return "Loading auto-payout status…";
@@ -546,49 +395,490 @@ const Commissions = () => {
       return `Next auto-payout in: ${countdown ?? ""}`.trim();
     }
 
-    return ""; // no fallback needed anymore
+    return "";
   };
 
-//===========================================================================================================================
-  
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
+  /**
+   * Build timeline chart data for a commission agreement.
+   *
+   * Terminology:
+   * - term: contract length in months
+   * - paidSoFar: total already paid (from payout records)
+   *
+   * This distributes the paid amount sequentially across months, so earlier months
+   * show paid values first.
+   */
+  const buildProjectionTimeline = (agreement, paidSoFar) => {
+    if (!agreement) return [];
 
-    const load = async () => {
-      try {
-        switch (activeView) {
-          case "Agreements":
-            await fetchCommissions();
-            break;
+    const term = Number(agreement.contractTerm) || 1;
+    const gp =
+      agreement.mrc != null && agreement.sellingPrice != null
+        ? Number(agreement.sellingPrice) - Number(agreement.mrc)
+        : 0;
 
-          case "Earned":
-            await fetchEarningsSummary();
-            break;
+    const monthlyCommission = gp * ((Number(agreement.commission_percentage) || 0) / 100);
+    const totalExpected = monthlyCommission * term;
 
-          case "Payouts":
-            await fetchPayoutSummary();
-            break;
+    const paid = Math.min(paidSoFar, totalExpected);
 
-          // case "Projections":
-          //   await fetchProjections(); // if you have it
-          //   break;
+    const startDate = agreement.start_date ? new Date(agreement.start_date) : new Date();
 
-          default:
-            break;
+    const formatMonthYear = (d) =>
+      d.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+
+    const data = [];
+
+    for (let month = 0; month < term; month += 1) {
+      const monthStartPaid = Math.min(paid, monthlyCommission * (month + 1));
+      const monthEndPaid = Math.min(paid, monthlyCommission * month);
+      const paidForMonth = monthStartPaid - monthEndPaid;
+      const remainingForMonth = Math.max(monthlyCommission - paidForMonth, 0);
+
+      const monthLabelDate = new Date(startDate);
+      monthLabelDate.setMonth(monthLabelDate.getMonth() + month);
+
+      data.push({
+        month: formatMonthYear(monthLabelDate),
+        paid: paidForMonth,
+        remaining: remainingForMonth,
+      });
+    }
+
+    return data;
+  };
+
+  // ============================================================================
+  // 5. API DATA FETCHING
+  // ============================================================================
+
+  /**
+   * Fetch all commission agreements
+   */
+  const fetchCommissions = async () => {
+    try {
+      const res = await axios.get("/api/commissions");
+      setCommissions(res.data);
+    } catch (err) {
+      console.error("Error fetching commissions:", err);
+      setError("Failed to load commissions.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Fetch earnings summary for the current month
+   */
+  const fetchEarningsSummary = async () => {
+    try {
+      const res = await axios.get("/api/commissions/earnings_summary");
+      setEarnings(res.data);
+    } catch (err) {
+      console.error("Error fetching earnings summary", err);
+    }
+  };
+
+  /**
+   * Fetch payout summary (paid and reversed commissions)
+   */
+  const fetchPayoutSummary = async () => {
+    try {
+      const res = await axios.get("/api/commissions/payout_summary");
+      setPayouts(res.data);
+    } catch (err) {
+      console.error("Error fetching payout summary", err);
+    }
+  };
+
+  // ============================================================================
+  // 6. COMMISSION AGREEMENT ACTIONS
+  // ============================================================================
+
+  /**
+   * Submit a commission agreement for approval
+   */
+  const handleApplyCommission = async (commissionId) => {
+    const commission_percentage =
+      editedCommissions[commissionId]?.commission_percentage ??
+      commissions.find((c) => c.id === commissionId)?.commission_percentage ??
+      10;
+
+    try {
+      setApplyButtonLoading(true);
+      await axios.post(
+        "/api/commissions/apply",
+        {
+          commission_id: commissionId,
+          commission_percentage,
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
         }
-      } catch (err) {
-        console.error(err);
-        setError("Failed to load data");
-      } finally {
-        setLoading(false);
+      );
+
+      alert("Commission submitted for approval");
+      await fetchCommissions();
+    } catch (err) {
+      console.error("Error submitting commission:", err.response?.data || err);
+      alert("Failed to submit commission");
+    } finally {
+      setApplyButtonLoading(false);
+    }
+  };
+
+  /**
+   * Pause a commission agreement
+   */
+  const handlePauseCommission = async (commissionId) => {
+    try {
+      setPauseButtonLoading(true);
+
+      await axios.post(
+        "/api/commissions/pause",
+        { commission_id: commissionId },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      alert("Commission agreement has been paused.");
+      await fetchCommissions();
+    } catch (err) {
+      console.error(
+        "Error pausing commission agreement:",
+        err.response?.data || err
+      );
+      alert("Failed to pause the commission agreement.");
+    } finally {
+      setPauseButtonLoading(false);
+    }
+  };
+
+  /**
+   * Resume a paused commission agreement
+   */
+  const handleResumeCommission = async (commissionId) => {
+    try {
+      setResumeButtonLoading(true);
+
+      await axios.post(
+        "/api/commissions/resume",
+        { commission_id: commissionId },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      alert("Commission agreement has been resumed.");
+      await fetchCommissions();
+    } catch (err) {
+      console.error(
+        "Error resuming commission agreement:",
+        err.response?.data || err
+      );
+      alert("Failed to resume the commission agreement.");
+    } finally {
+      setResumeButtonLoading(false);
+    }
+  };
+
+  /**
+   * Cancel a commission agreement
+   */
+  const handleCancelCommission = async (commissionId) => {
+    if (
+      !window.confirm(
+        "Cancelling a commission agreement will exclude it from all future accruals/payments. Are you sure?"
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await axios.post(
+        "/api/commissions/cancel",
+        { commission_id: commissionId },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      alert("Commission agreement has been canceled.");
+      await fetchCommissions();
+    } catch (err) {
+      console.error(
+        "Error canceling commission agreement:",
+        err.response?.data || err
+      );
+      alert("Failed to cancel the commission agreement.");
+    }
+  };
+
+  // ============================================================================
+  // 7. LEDGER ENTRY ACTIONS
+  // ============================================================================
+
+  /**
+   * Handle pay or reverse actions on ledger entries
+   */
+  const handleLedgerAction = async ({ ledgerId, userId, action }) => {
+    try {
+      if (!["pay", "reverse"].includes(action)) {
+        throw new Error("Invalid action: " + action);
       }
-    };
 
-    load();
-  }, [activeView]);
+      if (
+        action === "reverse" &&
+        !window.confirm(
+          "Are you sure you want to reverse this ledger entry?"
+        )
+      ) {
+        return;
+      }
 
+      const endpoint =
+        action === "pay"
+          ? "/api/commissions/earnings_summary/pay"
+          : "/api/commissions/earnings_summary/reverse";
 
+      const payload =
+        action === "pay"
+          ? {
+              user_id: userId,
+              earned_ledger_ids: [ledgerId],
+              payment_date: new Date().toISOString().slice(0, 10),
+              notes: "Manual payout",
+            }
+          : {
+              user_id: userId,
+              ledger_ids: [ledgerId],
+              reversal_date: new Date().toISOString().slice(0, 10),
+              notes: "Manual reversal",
+            };
+
+      const res = await axios.post(endpoint, payload);
+
+      // Success
+      if (res.status === 200 && res.data.status === "success") {
+        alert(
+          `${
+            action === "pay" ? "Commission paid" : "Ledger entry reversed"
+          } successfully`
+        );
+      }
+      // Partial success
+      else if (res.status === 207 || res.data.status === "partial") {
+        alert(
+          `Partial ${action === "pay" ? "payout" : "reversal"}: ${
+            action === "pay" ? "Paid" : "Reversed"
+          } ${res.data.paid_entries || res.data.reversed_entries}. Failed: ${
+            res.data.failed_entries.join(", ")
+          }`
+        );
+      }
+      // Failure
+      else {
+        alert(
+          `Failed to ${action} ledger entry: ` +
+            (res.data.message || "Unknown error")
+        );
+      }
+
+      await fetchEarningsSummary();
+    } catch (err) {
+      console.error(`${action} failed:`, err.response?.data || err);
+
+      if (err.response?.data?.message) {
+        alert(`Failed to ${action} ledger entry: ` + err.response.data.message);
+      } else {
+        alert(`Failed to ${action} ledger entry: Server error`);
+      }
+    }
+  };
+
+  // ============================================================================
+  // 8. AUTO-PAYOUT TOGGLE ACTIONS
+  // ============================================================================
+
+  /**
+   * Toggle the auto-payout kill switch
+   */
+  const handleToggleAutoPayout = async () => {
+    if (typeof autoPayoutEnabled !== "boolean") return;
+
+    const optimistic = !autoPayoutEnabled;
+    setAutoPayoutEnabled(optimistic);
+
+    try {
+      const res = await axios.post(
+        "/api/commissions/kill-switch",
+        { autoPayoutEnabled: optimistic },
+        { withCredentials: true }
+      );
+      const v = res?.data?.autoPayoutEnabled;
+      const confirmed = typeof v === "boolean" ? v : String(v).toLowerCase() === "true";
+      setAutoPayoutEnabled(confirmed);
+    } catch (err) {
+      console.error("Toggle failed; reverting:", err);
+      setAutoPayoutEnabled((prev) => !prev);
+    }
+  };
+
+  // ============================================================================
+  // 9. COMPUTED / DERIVED VALUES
+  // ============================================================================
+
+  // Derived data for filtering
+  const salespersonOptions = [
+    ...new Set(commissions.map((c) => c.salesperson_name).filter(Boolean)),
+  ];
+
+  const filteredCommissions = filterByMonthYearAndSalesperson(
+    commissions,
+    "start_date"
+  );
+  const filteredEarnings = filterByMonthYearAndSalesperson(
+    earnings,
+    "period_end"
+  );
+  const filteredPayouts = filterByMonthYearAndSalesperson(
+    payouts,
+    "period_end"
+  );
+
+  // Calculate totals for Earned view
+  const totalEarned = Object.values(
+    filteredEarnings.reduce((acc, e) => {
+      if (!acc[e.id]) acc[e.id] = e;
+      return acc;
+    }, {})
+  ).reduce((sum, e) => sum + (Number(e.commission_value) || 0), 0);
+
+  // Calculate totals for Payouts view
+  const totalsByStatus = filteredPayouts.reduce(
+    (acc, p) => {
+      const value = Number(p.commission_value) || 0;
+
+      if (p.effective_status === "paid") {
+        acc.paid += value;
+        acc.total += value;
+      }
+
+      if (p.effective_status === "reversed") {
+        acc.reversed += value;
+      }
+
+      return acc;
+    },
+    { paid: 0, reversed: 0, total: 0 }
+  );
+
+  // Projection view: only show circuits the current user can SEE (for non-admin/finance users)
+  const isAgreementVisible = (agreement) => {
+    if (userRole === "admin" || userRole === "finance") return true;
+
+    if (!agreement) return false;
+
+    // Match by salesperson name, user name, or email (if available)
+    const salesName = agreement.salesperson_name?.toLowerCase?.() ?? "";
+    const userName = (userIdentifier.name || "").toLowerCase();
+
+    const isNameMatch = salesName && userName && salesName === userName;
+
+    const isIdMatch =
+      userIdentifier.id &&
+      (agreement.salesperson_id === userIdentifier.id ||
+        agreement.user_id === userIdentifier.id);
+
+    // If commission record includes an email field, use it too
+    const salesEmail = (agreement.salesperson_email || "").toLowerCase();
+    const userEmail = (userIdentifier.email || "").toLowerCase();
+
+    return isNameMatch || isIdMatch || (salesEmail && userEmail && salesEmail === userEmail);
+  };
+
+  const projectionAgreements = commissions.filter(isAgreementVisible);
+
+  // Projection view: selected agreement (filtered by visibility)
+  const selectedProjectionAgreement = projectionAgreements.find(
+    (c) => String(c.id) === String(selectedProjectionCommissionId)
+  );
+
+  // Ensure the selected projection agreement is always valid for the current user and view
+  useEffect(() => {
+    if (activeView !== "Projections") return;
+
+    if (!selectedProjectionCommissionId && projectionAgreements.length > 0) {
+      setSelectedProjectionCommissionId(String(projectionAgreements[0].id));
+      return;
+    }
+
+    if (
+      selectedProjectionCommissionId &&
+      !projectionAgreements.some(
+        (c) => String(c.id) === String(selectedProjectionCommissionId)
+      )
+    ) {
+      setSelectedProjectionCommissionId(
+        projectionAgreements.length > 0
+          ? String(projectionAgreements[0].id)
+          : ""
+      );
+    }
+  }, [
+    activeView,
+    projectionAgreements,
+    selectedProjectionCommissionId,
+  ]);
+
+  // NOTE: Use the full payouts list (not date-filtered) to correctly compute paid totals
+  const projectionPaidTotal = payouts.reduce((sum, p) => {
+    if (String(p?.commission_id) === String(selectedProjectionCommissionId)) {
+      return sum + (Number(p.commission_value) || 0);
+    }
+    return sum;
+  }, 0);
+
+  const projectionChartData = buildProjectionTimeline(
+    selectedProjectionAgreement,
+    projectionPaidTotal
+  );
+
+  // Projection stat cards (computed values)
+  const projectionContractTerm = Number(selectedProjectionAgreement?.contractTerm) || 0;
+  const projectionSellingPrice = Number(selectedProjectionAgreement?.sellingPrice) || 0;
+  const projectionMrc = Number(selectedProjectionAgreement?.mrc) || 0;
+  const projectionCommissionPct = Number(
+    selectedProjectionAgreement?.commission_percentage
+  )
+    ? Number(selectedProjectionAgreement.commission_percentage)
+    : 0;
+
+  const projectionTotalContractValue = projectionSellingPrice * projectionContractTerm;
+  const projectionGp = projectionSellingPrice - projectionMrc;
+  const projectionMonthlyCommission =
+    projectionGp * (projectionCommissionPct / 100);
+  const projectionTotalCommission = projectionMonthlyCommission * projectionContractTerm;
+  const projectionCommissionPaid = projectionPaidTotal;
+  const projectionCommissionRemaining = Math.max(
+    projectionTotalCommission - projectionCommissionPaid,
+    0
+  );
+
+  // ============================================================================
+  // 10. RENDER
+  // ============================================================================
+
+  // Loading state
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -597,6 +887,7 @@ const Commissions = () => {
     );
   }
 
+  // Error state
   if (error) {
     return (
       <div className="p-6 text-center text-red-500">
@@ -605,66 +896,20 @@ const Commissions = () => {
     );
   }
 
-  const salespersonOptions = [
-    ...new Set(
-      commissions.map((c) => c.salesperson_name).filter(Boolean)
-    ),
-  ];
-
-  const filteredCommissions =
-    filterByMonthYearAndSalesperson(commissions, "start_date");
-
-  const filteredEarnings =
-    filterByMonthYearAndSalesperson(earnings, "period_end");
-
-  const filteredPayouts =
-    filterByMonthYearAndSalesperson(payouts, "period_end");
-
-  // Displays the total earned commissions for the currently filtered earnings, summing up the commission_value field. This is used in the Earned view summary.
-  const totalEarned = Object.values(
-    filteredEarnings.reduce((acc, e) => {
-      if (!acc[e.id]) acc[e.id] = e
-      return acc
-    }, {})
-  ).reduce((sum, e) => sum + (Number(e.commission_value) || 0), 0)
-
-  // Calculates total paid and reversed commissions from the currently filtered payouts. It iterates through the filtered payouts and sums up the commission_value for entries with status "paid" and "reversed". This is used in the Payouts view summary.
-  const totalsByStatus = filteredPayouts.reduce(
-  (acc, p) => {
-    const value = Number(p.commission_value) || 0;
-
-    if (p.effective_status === "paid") {
-      acc.paid += value;
-      acc.total += value;   // only paid contributes to total
-    }
-
-    if (p.effective_status === "reversed") {
-      acc.reversed += value;
-    }
-
-    return acc;
-  },
-  { paid: 0, reversed: 0, total: 0 }
-);
-  
+  // Main render
   return (
     <div className="p-6 bg-base-200 min-h-screen">
       <div className="max-w-7xl mx-auto card bg-white dark:bg-gray-800 shadow-xl p-8">
-        
+        {/* Header: View Title + Kill Switch Panel */}
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-semibold capitalize">
-            {activeView}
-          </h2>
+          <h2 className="text-2xl font-semibold capitalize">{activeView}</h2>
 
-          {/* Kill Switch Panel */}
           {canFilterBySalesPerson && (
             <div className="flex items-center gap-4 bg-gray-100 dark:bg-gray-900 px-4 py-2 rounded-lg shadow-sm">
-              {/* Countdown */}
               <div className="text-sm font-mono text-gray-700 dark:text-gray-300">
                 {getCountdownLabel()}
               </div>
 
-              {/* Toggle Button */}
               {autoPayoutEnabled === null ? (
                 <button
                   disabled
@@ -674,27 +919,26 @@ const Commissions = () => {
                 </button>
               ) : (
                 <button
-                  onClick={toggleAutoPayout}
+                  onClick={handleToggleAutoPayout}
                   className={`px-3 py-1 rounded text-sm font-semibold transition ${
                     autoPayoutEnabled
                       ? "bg-red-600 text-white hover:bg-red-700"
                       : "bg-green-600 text-white hover:bg-green-700"
                   }`}
                 >
-                  {autoPayoutEnabled ? "AUTO PAYOUT ENABLED" : "AUTO PAYOUT DISABLED"}
+                  {autoPayoutEnabled
+                    ? "AUTO PAYOUT ENABLED"
+                    : "AUTO PAYOUT DISABLED"}
                 </button>
               )}
             </div>
           )}
         </div>
-  
 
-        
-        <div className="flex items-center justify-between mb-6">
-
-          {/* View Buttons */}
+        {/* View Selector + Filters */}
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
           <div className="hidden md:inline-flex join">
-            {views.map((v) => (
+            {VIEWS.map((v) => (
               <button
                 key={v.key}
                 className={`btn btn-sm join-item ${
@@ -707,31 +951,35 @@ const Commissions = () => {
             ))}
           </div>
 
-          {/* Month/Year Filters on the Right */}
           <div className="flex gap-2 items-center">
-
-            {/* Month */}
+            {/* Month Filter */}
             <select
               className="select select-bordered select-sm"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
             >
               <option value="">All Months</option>
-              <option value="0">Jan</option>
-              <option value="1">Feb</option>
-              <option value="2">Mar</option>
-              <option value="3">Apr</option>
-              <option value="4">May</option>
-              <option value="5">Jun</option>
-              <option value="6">Jul</option>
-              <option value="7">Aug</option>
-              <option value="8">Sep</option>
-              <option value="9">Oct</option>
-              <option value="10">Nov</option>
-              <option value="11">Dec</option>
+              {[
+                "Jan",
+                "Feb",
+                "Mar",
+                "Apr",
+                "May",
+                "Jun",
+                "Jul",
+                "Aug",
+                "Sep",
+                "Oct",
+                "Nov",
+                "Dec",
+              ].map((month, idx) => (
+                <option key={idx} value={idx}>
+                  {month}
+                </option>
+              ))}
             </select>
 
-            {/* Year */}
+            {/* Year Filter */}
             <select
               className="select select-bordered select-sm"
               value={selectedYear}
@@ -748,7 +996,7 @@ const Commissions = () => {
               })}
             </select>
 
-            {/* Salesperson Filter - only visible when role is 'admin' or 'finance' */}
+            {/* Salesperson Filter */}
             {canFilterBySalesPerson && (
               <select
                 className="select select-bordered select-sm"
@@ -756,7 +1004,6 @@ const Commissions = () => {
                 onChange={(e) => setSelectedSalesPerson(e.target.value)}
               >
                 <option value="">All Salespeople</option>
-
                 {salespersonOptions.map((name) => (
                   <option key={name} value={name}>
                     {name}
@@ -764,7 +1011,6 @@ const Commissions = () => {
                 ))}
               </select>
             )}
-
 
             {/* Reset Button */}
             <button
@@ -778,406 +1024,124 @@ const Commissions = () => {
               Reset
             </button>
 
-
+            {/* Filter Active Indicator */}
             {(selectedMonth || selectedYear || selectedSalesPerson) && (
               <span className="px-3 py-1 rounded-full bg-warning text-black text-sm">
                 Filter Active
               </span>
             )}
-
           </div>
         </div>
 
-
-        {/* ===========VIEWS========================================================================================================================= */}
+        {/* Views */}
         {activeView === "Agreements" && (
-          <>
-            {commissions.length === 0 ? (
-              <p className="text-center text-gray-500">No commissions found.</p>
-            ) : (
-              // Table container: scrollable both vertically and horizontally
-              <div className="overflow-auto max-h-150">
-                <table className="table table-zebra table-auto w-full">
-                  <thead className="sticky top-0 z-10 bg-white dark:bg-gray-800">
-                    <tr>
-                      <th></th>
-                      <th>ID</th>
-                      <th>Salesperson</th>
-                      <th>Circuit Number</th>
-                      <th>Client</th>
-                      <th>GP (R)</th>
-                      <th>Commission (%)</th>
-                      <th>Commission (R)</th>
-                      <th>Status</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredCommissions.map((c) => {
-                      const commissionId = c.id;
-                      const percentage = editedCommissions[commissionId]?.commission_percentage ?? c.commission_percentage ?? 10;
-                      const gp = c.mrc != null && c.sellingPrice != null ? Number(c.sellingPrice) - Number(c.mrc) : 0;
-                      const commissionValue = gp * (percentage / 100);
-                      const isPercentageEditable = c.status === "new";
-
-                      return (
-                        <React.Fragment key={commissionId}>
-                          <tr>
-                            <td>
-                              <button
-                                className="btn btn-xs btn-ghost"
-                                onClick={() => toggleRow(commissionId)}
-                              >
-                                {expandedRow === commissionId ? "−" : "+"}
-                              </button>
-                            </td>
-                            <td>{commissionId}</td>
-                            <td>{c.salesperson_name}</td>
-                            <td>{c.circuitNumber || "-"}</td>
-                            <td>{c.siteB_name || "-"}</td>
-                            <td>{gp ? `R${gp.toFixed(2)}` : "-"}</td>
-                            <td>
-                              <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                max="100"
-                                className="input input-sm input-bordered w-20"
-                                value={percentage}
-                                disabled={!isPercentageEditable}
-                                onChange={(e) =>
-                                  setEditedCommissions((prev) => ({
-                                    ...prev,
-                                    [commissionId]: {
-                                      ...prev[commissionId],
-                                      commission_percentage: Number(e.target.value),
-                                    },
-                                  }))
-                                }
-                              />
-                            </td>
-                            <td className="text-right whitespace-nowrap">{commissionValue ? `R${commissionValue.toFixed(2)}` : "-"}</td>
-                            <td>
-                              <span className={`badge badge-outline ${statusColors[c.status] || "bg-gray-100 text-gray-800"}`}>
-                                {c.status || "-"}
-                              </span>
-                            </td>
-                            <td>
-                              {["admin", "finance"].includes(userRole) ? (
-                                <div className="dropdown dropdown-end">
-                                  <label tabIndex={0} className="btn btn-xs btn-accent">
-                                    Actions
-                                  </label>
-                                  <ul tabIndex={0} className="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-40">
-                                    {/* Map over all possible actions for this commission */}
-                                    {["apply", "pause", "resume", "cancel"].map(action => {
-                                      if (!can(c.status, action)) return null; // skip if not allowed
-
-                                      // Determine loading state per action
-                                      let isLoading = false;
-                                      switch (action) {
-                                        case "apply":
-                                          isLoading = applyButtonLoading;
-                                          break;
-                                        case "pause":
-                                          isLoading = pauseButtonLoading;
-                                          break;
-                                        case "resume":
-                                          isLoading = resumeButtonLoading;
-                                          break;
-                                        default:
-                                          isLoading = false;
-                                      }
-
-                                      // Map action to handler function
-                                      const handlerMap = {
-                                        apply: () => applyCommission(commissionId),
-                                        pause: () => pauseCommissionAgreement(commissionId),
-                                        resume: () => resumeCommissionAgreement(commissionId),
-                                        cancel: () => cancelCommissionAgreement(commissionId),
-                                      };
-
-                                      return (
-                                        <li key={action}>
-                                          <button
-                                            disabled={isLoading}
-                                            onClick={handlerMap[action]}
-                                          >
-                                            {isLoading ? (
-                                              <Loader2 className={`w-4 h-4 animate-spin ${action === "apply" ? "w-5 h-5" : ""}`} />
-                                            ) : (
-                                              action.charAt(0).toUpperCase() + action.slice(1)
-                                            )}
-                                          </button>
-                                        </li>
-                                      );
-                                    })}
-                                  </ul>
-                                </div>
-                              ) : (
-                                // Non-admin: only show Apply if allowed
-                                can(c.status, "apply") && (
-                                  <button
-                                    className="btn btn-xs btn-accent"
-                                    disabled={applyButtonLoading}
-                                    onClick={() => applyCommission(commissionId)}
-                                  >
-                                    {applyButtonLoading ? (
-                                      <Loader2 className="w-5 h-5 animate-spin" />
-                                    ) : (
-                                      "Apply"
-                                    )}
-                                  </button>
-                                )
-                              )}
-                            </td>
-                          </tr>
-
-                          {expandedRow === commissionId ? (
-                            <tr className="bg-base-100">
-                              <td colSpan={10}>
-                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 p-4 text-sm">
-                                  <div>
-                                    <span className="font-semibold">Contract:</span>
-                                    <div>{c.contractTerm || "-"} months</div>
-                                  </div>
-                                  <div>
-                                    <span className="font-semibold">Effective Date:</span>
-                                    <div>{c.start_date ? new Date(c.start_date).toLocaleDateString(
-                                      "en-GB", {day: "2-digit", month: "short", year: "numeric"}) : "-"}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <span className="font-semibold">Created:</span>
-                                    <div>{c.created_at ? new Date(c.created_at).toLocaleDateString(
-                                      "en-GB", {day: "2-digit", month: "short", year: "numeric"}) : "-"}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <span className="font-semibold">Updated:</span>
-                                    <div>{c.updated_at ? new Date(c.updated_at).toLocaleDateString(
-                                      "en-GB", {day: "2-digit", month: "short", year: "numeric"}) : "-"}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <span className="font-semibold">Notes:</span>
-                                    <div>{c.notes || "-"}</div>
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          ) : null}
-                        </React.Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
+          <AgreementsTable
+            filteredCommissions={filteredCommissions}
+            commissions={commissions}
+            editedCommissions={editedCommissions}
+            setEditedCommissions={setEditedCommissions}
+            expandedRow={expandedRow}
+            toggleRow={(id) =>
+              setExpandedRow((prev) => (prev === id ? null : id))
+            }
+            statusColors={STATUS_COLORS}
+            userRole={userRole}
+            applyButtonLoading={applyButtonLoading}
+            pauseButtonLoading={pauseButtonLoading}
+            resumeButtonLoading={resumeButtonLoading}
+            can={canPerformAction}
+            onApply={handleApplyCommission}
+            onPause={handlePauseCommission}
+            onResume={handleResumeCommission}
+            onCancel={handleCancelCommission}
+          />
         )}
-
 
         {activeView === "Earned" && (
-          <div className="text-center text-base-content">
-            {earnings.length === 0 ? (
-              <p className="text-center text-gray-500">No earnings summary found.</p>
-            ) : (
-              <div className="overflow-auto max-h-150">
-                <table className="table table-zebra table-auto w-full">
-                  <thead className="sticky top-0 z-10 bg-white dark:bg-gray-800">
-                    <tr>
-                      <th>Agr. ID</th>
-                      <th>Salesperson</th>
-                      <th>Circuit Number</th>
-                      <th>Client</th>
-                      <th>Active Days</th>
-                      <th>Period Ending</th>
-                      <th>Entry Type</th>
-                      <th>Commission (R)</th>
-                      <th>Status</th>
-                      {canFilterBySalesPerson && <th>Action</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredEarnings.map((e) => {
-                      const isReversed = e.effective_status === "reversed";
-                      const commissionValue = isReversed
-                        ? `-R${Number(e.commission_value ?? 0).toFixed(2)}`
-                        : e.commission_value != null
-                        ? `R${Number(e.commission_value).toFixed(2)}`
-                        : "-";
-
-                        const rowKey = `${e.id}-${e.entry_type}-${e.effective_status}`; // ✅ unique
-
-                      return (
-                        <tr key={rowKey}>
-                          <td>{e.commission_id || "-"}</td>
-                          <td>{`${e.user_name || ""} ${e.user_surname || ""}`.trim() || "-"}</td>
-                          <td className="text-right whitespace-nowrap">{e.circuit_number || "-"}</td>
-                          <td className="text-right whitespace-nowrap">{e.client_name || "-"}</td>
-                          <td className="text-right whitespace-nowrap">{e.active_days || "-"}</td>
-                          <td className="text-right whitespace-nowrap">{e.period_end || "-"}</td>
-                          <td className="text-right whitespace-nowrap">
-                            <div className="tooltip tooltip-left" data-tip={`Ledger ID: ${e.id}`}>
-                              <span className="cursor-help">{e.entry_type || "-"}</span>
-                            </div>
-                          </td>
-                          <td className={`text-right whitespace-nowrap ${isReversed ? "text-red-600 font-semibold" : ""}`}>
-                            {commissionValue}
-                          </td>
-                          <td>
-                            <span className={`badge ${statusColors[e.effective_status] || "bg-gray-100 text-gray-800"}`}>
-                              {e.effective_status}
-                            </span>
-                          </td>
-                          {canFilterBySalesPerson && (
-                            <td>
-                              <div className="dropdown">
-                                <label tabIndex={0} className="btn btn-xs btn-accent">Actions</label>
-                                <ul tabIndex={0} className="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-32 static">
-                                  {getLedgerActions(e).length === 0 && (
-                                    <li>
-                                      <button disabled>No actions available</button>
-                                    </li>
-                                  )}
-                                  {getLedgerActions(e).map((action, idx) => (
-                                    <li key={`${e.id}-action-${idx}`}> {/* combine ledger id + index for unique keys */}
-                                      <button
-                                        onClick={() =>
-                                          handleLedgerEntry({
-                                            ledgerId: e.id,
-                                            userId: e.user_id,
-                                            action: action.type,
-                                          })
-                                        }
-                                        disabled={action.disabled}
-                                      >
-                                        {action.label}
-                                      </button>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            </td>
-                          )}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot className="bg-gray-100 dark:bg-gray-700">
-                    <tr className="font-semibold border-t">
-                      <td colSpan="9" className="text-right pr-4">
-                        Total Earned
-                      </td>
-                      <td>
-                        R {totalEarned.toFixed(2)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )}
-          </div>
+          <EarningsTable
+            filteredEarnings={filteredEarnings}
+            statusColors={STATUS_COLORS}
+            canFilterBySalesPerson={canFilterBySalesPerson}
+            totalEarned={totalEarned}
+            getLedgerActions={getLedgerActions}
+            onLedgerAction={handleLedgerAction}
+          />
         )}
 
-              
         {activeView === "Payouts" && (
-          <>
-            <div className="text-center text-base-content">
-              {filteredPayouts.length === 0 ? (
-                <p className="text-center text-gray-500">No payout summary found.</p>
-              ) : (
-                <div className="overflow-auto max-h-150">
-                  <table className="table table-zebra table-auto w-full">
-                    <thead className="sticky top-0 z-10 bg-white dark:bg-gray-800">
-                      <tr>
-                        <th>ID</th>
-                        <th>Salesperson</th>
-                        <th>Circuit Number</th>
-                        <th>Client</th>
-                        <th>Active Days</th>
-                        <th>Period Ending</th>
-                        <th>Entry Type</th>
-                        <th>Commission (R)</th>
-                        <th>Status</th>
-                        {/* <th>Actions</th> */}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredPayouts.map((p) => {
-                        const fullName =
-                          [p.user_name, p.user_surname].filter(Boolean).join(" ").trim() || "-";
-
-                        const isReversed = p.effective_status === "reversed";
-                        const commissionStr =
-                          p?.commission_value != null && !Number.isNaN(Number(p.commission_value))
-                            ? isReversed
-                              ? `-R${Number(p.commission_value).toFixed(2)}`
-                              : `R${Number(p.commission_value).toFixed(2)}`
-                            : "-";
-
-                        const statusClass = statusColors?.[p.effective_status] ?? "bg-gray-100 text-gray-800";
-
-                        // ✅ Unique key per row
-                        const rowKey = `${p.id}-${p.entry_type}-${p.effective_status}`;
-
-                        return (
-                          <tr key={rowKey}>
-                            <td>{p.id}</td>
-                            <td>{fullName}</td>
-                            <td className="text-right whitespace-nowrap">{p.circuit_number || "-"}</td>
-                            <td className="text-right whitespace-nowrap">{p.client_name || "-"}</td>
-                            <td className="text-right whitespace-nowrap">{p.active_days ?? "-"}</td>
-                            <td className="text-right whitespace-nowrap">{p.period_end || "-"}</td>
-                            <td className="text-right whitespace-nowrap">{p.entry_type || "-"}</td>
-                            <td className={`text-right whitespace-nowrap ${isReversed ? "text-red-600 font-semibold" : ""}`}>
-                              {commissionStr}
-                            </td>
-                            <td className="text-right whitespace-nowrap">
-                              <span className={`badge ${statusClass}`}>{p.effective_status ?? "-"}</span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                      <tfoot className="bg-gray-50 font-semibold border-t">
-                        <tr>
-                          <td colSpan="5" className="text-right pr-4">Totals</td>
-                          {/* <td>{filteredPayouts.reduce((sum, p) => sum + (p.active_days || 0), 0)}</td> */}
-                          <td></td>
-                          <td></td>
-                          <td>
-                            <div className="flex flex-col">
-                              <span>Paid: R{totalsByStatus.paid.toFixed(2)}</span>
-                              <span>Reversed: R{totalsByStatus.reversed.toFixed(2)}</span>
-                              <span>Total: R{totalsByStatus.total.toFixed(2)}</span>
-                            </div>
-                          </td>
-                          <td></td>
-                        </tr>
-                      </tfoot>
-                  </table>
-                </div>
-              )}
-            </div>
-          </>
+          <PayoutsTable
+            filteredPayouts={filteredPayouts}
+            statusColors={STATUS_COLORS}
+            totalsByStatus={totalsByStatus}
+          />
         )}
 
         {activeView === "Projections" && (
-          <div className="text-center text-gray-500">
-            {/* Replace with your Projections UI */}
-            Projections view coming soon…
+          <div className="space-y-6">
+            {projectionAgreements.length === 0 ? (
+              <p className="text-center text-gray-500">
+                No agreements available for projections.
+              </p>
+            ) : (
+              <>
+                <div className="flex flex-col md:flex-row md:items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">Circuit:</span>
+                    <select
+                      value={selectedProjectionCommissionId ?? ""}
+                      onChange={(e) =>
+                        setSelectedProjectionCommissionId(String(e.target.value))
+                      }
+                      className="select select-bordered select-sm"
+                    >
+                      {projectionAgreements.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.circuitNumber ? `${c.circuitNumber}` : `ID ${c.id}`} - {c.salesperson_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="text-sm text-gray-600">
+                    Showing projections for the selected circuit agreement.
+                  </div>
+                </div>
+
+                {selectedProjectionAgreement ? (
+                  <>
+                    <div className="flex flex-wrap gap-4 mb-6">
+                      <StatCard
+                        title="Total Contract Value"
+                        amount={projectionTotalContractValue}
+                      />
+                      <StatCard
+                        title="Total Commission"
+                        amount={projectionTotalCommission}
+                      />
+                      <StatCard
+                        title="Commission Paid"
+                        amount={projectionCommissionPaid}
+                      />
+                      <StatCard
+                        title="Commission Remaining"
+                        amount={projectionCommissionRemaining}
+                      />
+                    </div>
+
+                    <CommissionTimelineChart data={projectionChartData} />
+                  </>
+                ) : (
+                  <p className="text-center text-gray-500">
+                    Select a circuit to view projections.
+                  </p>
+                )}
+              </>
+            )}
           </div>
         )}
-
-
-
-
-      </div>  
+      </div>
     </div>
   );
-
 };
 
 export default Commissions;

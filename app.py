@@ -1,5 +1,5 @@
 from flask import Flask
-from flask import jsonify, request, make_response, send_file, send_from_directory, render_template
+from flask import jsonify, request, make_response, send_file, send_from_directory, render_template, current_app
 from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, unset_jwt_cookies, jwt_required, JWTManager, verify_jwt_in_request, set_access_cookies
 from flask_cors import CORS
 from flask_mail import Mail, Message
@@ -225,6 +225,10 @@ def has_significant_price_change(old_price, new_price, threshold=10.00):
     if old_price == 0:
         return new_price != 0
     return abs(new_price - old_price) / old_price > threshold
+
+def send_async_email_to_salesperson(app, msg):
+    with app.app_context():
+        mail.send(msg)
 
 
 #========================================================================================================================
@@ -1101,7 +1105,12 @@ def approve_commission():
                 rejection_reason=reason_text if not approve else None
             )
         )
-        mail.send(notification)
+        
+        # 🔥 Start background thread
+        Thread(
+            target=send_async_email_to_salesperson,
+            args=(current_app._get_current_object(), notification)
+        ).start()
 
     # Render confirmation page for manager
     return render_template(
