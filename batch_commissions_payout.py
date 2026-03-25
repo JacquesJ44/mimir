@@ -30,7 +30,7 @@ db = DbUtil({
     'db': os.getenv('DB_NAME')
 })
 
-LOG_FILE = 'batch_commission_payout.log'
+LOG_FILE = 'batch_commissions_payout.log'
 logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format='%(asctime)s %(levelname)s:%(message)s')
 
 
