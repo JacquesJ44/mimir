@@ -2,6 +2,9 @@ import pymysql
 from datetime import date, datetime
 from flask import request
 from decimal import Decimal
+from datetime import date, timedelta
+from dateutil.relativedelta import relativedelta
+
 
 from utils import month_bounds, overlap_days
 
@@ -774,7 +777,7 @@ class DbUtil:
             conn = self.get_connection()
             with conn.cursor(pymysql.cursors.DictCursor) as c:
                 c.execute("""
-                    SELECT 
+                    SELECT DISTINCT
                         c.id,
                         c.circuit_id,
                         c.salesperson_id,
@@ -799,8 +802,12 @@ class DbUtil:
                     LEFT JOIN sites siteA ON cir.siteA = siteA.id
                     LEFT JOIN sites siteB ON cir.siteB = siteB.id
                     WHERE c.salesperson_id = %s
+                       OR EXISTS (
+                            SELECT 1 FROM commission_ledger cl
+                            WHERE cl.commission_id = c.id AND cl.user_id = %s
+                       )
                     ORDER BY c.created_at DESC
-                """, (salesperson_id,))
+                """, (salesperson_id, salesperson_id))
 
                 rows = c.fetchall()
 
@@ -1552,7 +1559,151 @@ class DbUtil:
         except Exception as e:
             raise RuntimeError(f"Database error: {e}")
         
-    
+    #=============================================================================================================================================
+
+    def get_commission_projection(self, commission_id, user_id, role):
+        conn = self.get_connection()
+        with conn.cursor(pymysql.cursors.DictCursor) as c:
+
+            # ------------------------------------------------------------------
+            # 1. Get commission agreement
+            # ------------------------------------------------------------------
+            c.execute("""
+                SELECT 
+                    c.id AS commission_id,
+                    c.start_date AS commission_start_date,
+                    cir.startDate AS circuit_start_date,
+                    cir.contractTerm AS contract_term,
+                    cir.sellingPrice AS selling_price,
+                    cir.mrc AS mrc,
+                    c.commission_percentage AS commission_percentage,
+                    c.salesperson_id
+                FROM commissions c
+                JOIN circuits cir ON c.circuit_id = cir.id
+                WHERE c.id = %s
+                AND (
+                    %s IN ('admin', 'finance')
+                    OR c.salesperson_id = %s
+                    OR EXISTS (
+                        SELECT 1
+                        FROM commission_ledger cl
+                        WHERE cl.commission_id = c.id
+                        AND cl.user_id = %s
+                    )
+                );
+            """, (commission_id, role, user_id, user_id))
+            agreement = c.fetchone()
+            if not agreement:
+                return []
+
+            # ------------------------------------------------------------------
+            # 2. Get earned ledger entries
+            # ------------------------------------------------------------------
+            c.execute("""
+                SELECT id, period_start, period_end, commission_value, active_days, days_in_month
+                FROM commission_ledger
+                WHERE commission_id = %s
+                AND entry_type = 'earned'
+            """, (commission_id,))
+            earned_entries = c.fetchall()
+            earned_map = {e["period_start"]: e for e in earned_entries}
+
+            # ------------------------------------------------------------------
+            # 3. Get payments mapped to earned periods
+            # ------------------------------------------------------------------
+            c.execute("""
+                SELECT 
+                    p.reference_ledger_id,
+                    e.period_start,
+                    p.commission_value
+                FROM commission_ledger p
+                JOIN commission_ledger e 
+                    ON e.id = p.reference_ledger_id
+                WHERE p.commission_id = %s
+                AND p.entry_type = 'payment'
+                AND p.status = 'paid'
+            """, (commission_id,))
+            from collections import defaultdict
+            payment_rows = c.fetchall()
+            payments_map = defaultdict(float)
+            for row in payment_rows:
+                payments_map[row["period_start"]] += float(row["commission_value"] or 0)
+
+            # ------------------------------------------------------------------
+            # 4. Setup calculation variables
+            # ------------------------------------------------------------------
+            from datetime import timedelta
+            from dateutil.relativedelta import relativedelta
+            from calendar import monthrange
+
+            contract_start = agreement["commission_start_date"]
+            term = int(agreement["contract_term"] or 0)
+            gp = float(agreement["selling_price"] or 0) - float(agreement["mrc"] or 0)
+            pct = float(agreement["commission_percentage"] or 0) / 100
+
+            contract_end = contract_start + relativedelta(months=term) - timedelta(days=1)
+
+            def month_bounds(dt):
+                start = dt.replace(day=1)
+                next_month = start + relativedelta(months=1)
+                end = next_month - timedelta(days=1)
+                return start, end
+
+            def get_active_days(period_start, period_end):
+                actual_start = max(period_start, contract_start)
+                actual_end = min(period_end, contract_end)
+                if actual_start > actual_end:
+                    return 0
+                return (actual_end - actual_start).days + 1
+
+            # ------------------------------------------------------------------
+            # 5. Build timeline (earned + projected)
+            # ------------------------------------------------------------------
+            timeline = []
+            current = contract_start.replace(day=1)
+
+            while current <= contract_end:
+                period_start, period_end = month_bounds(current)
+
+                # Adjust last month if period_end goes past contract_end
+                if period_end > contract_end:
+                    period_end = contract_end
+
+                # Use ledger if exists
+                if period_start in earned_map:
+                    e = earned_map[period_start]
+                    earned_value = float(e["commission_value"] or 0)
+                    active_days = int(e["active_days"] or 0)
+                    days_in_month = int(e["days_in_month"] or 0)
+                    entry_type = "earned"
+                else:
+                    days_in_month = monthrange(period_start.year, period_start.month)[1]
+                    active_days = get_active_days(period_start, period_end)
+                    earned_value = (gp * pct) * (active_days / days_in_month)
+                    entry_type = "projected"
+
+                paid_value = payments_map.get(period_start, 0.0)
+
+                timeline.append({
+                    "period_start": period_start,
+                    "period_end": period_end,
+                    "earned": round(earned_value, 2),
+                    "paid": round(paid_value, 2),
+                    "remaining": round(max(earned_value - paid_value, 0), 2),
+                    "type": entry_type,
+                    "active_days": active_days,
+                    "days_in_month": days_in_month
+                })
+
+                current += relativedelta(months=1)
+
+            return timeline
+            
+
+
+    #=============================================================================================================================================
+    # SYTEM SETTINGS
+    #=============================================================================================================================================
 
     # Automated payout kill switch lookup
     def get_system_setting_bool(self, key: str) -> bool:
@@ -1565,11 +1716,6 @@ class DbUtil:
             return False  # Fail closed
 
         return row[0].lower() in ("1", "true", "yes", "on")
-
-
-    #=============================================================================================================================================
-    # SYTEM SETTINGS
-    #=============================================================================================================================================
 
     def get_system_setting(self, key: str):
         conn = self.get_connection()

@@ -1,36 +1,9 @@
-/**
- * Commission Dashboard
- *
- * A comprehensive commission management system with 4 main views:
- * - Agreements: View and manage commission agreements
- * - Earned: Track earned commissions and pay/reverse entries
- * - Payouts: View paid and reversed commissions
- * - Projections: (Future view)
- *
- * Features:
- * - Kill switch for auto-payout toggle
- * - Countdown timer to next payout
- * - Filtering by month, year, and salesperson (admin/finance only)
- * - Role-based action permissions
- *
- * Structure:
- * 1. Imports & Constants
- * 2. State Declarations (grouped by concern)
- * 3. Effects (grouped by feature)
- * 4. Helper Utilities & Validators
- * 5. API Data Fetching
- * 6. Commission Agreement Actions
- * 7. Ledger Entry Actions
- * 8. Auto-Payout Toggle Actions
- * 9. Computed/Derived Values
- * 10. Render Logic
- */
 
 // ============================================================================
 // 1. IMPORTS & CONSTANTS
 // ============================================================================
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { jwtDecode } from "jwt-decode";
 import axios from "./AxiosInstance";
 import { Loader2 } from "lucide-react";
@@ -78,6 +51,7 @@ const COMMISSION_ACTIONS = {
 // ============================================================================
 
 const Commissions = () => {
+    // ...existing code...
   const currentYear = new Date().getFullYear();
 
   // ========================================================================
@@ -96,6 +70,7 @@ const Commissions = () => {
   const [commissions, setCommissions] = useState([]);
   const [earnings, setEarnings] = useState([]);
   const [payouts, setPayouts] = useState([]);
+  const [projectionData, setProjectionData] = useState([]);
 
   // ========================================================================
   // STATE: UI & View Management
@@ -297,19 +272,33 @@ const Commissions = () => {
     load();
   }, [activeView]);
 
-  // Effect: Refresh payout data when a different circuit is selected in Projections
   useEffect(() => {
     if (activeView !== "Projections") return;
     if (!selectedProjectionCommissionId) return;
 
-    fetchPayoutSummary();
+    const fetchProjection = async () => {
+      try {
+        const res = await axios.get(
+          `/api/commissions/projections/${selectedProjectionCommissionId}`
+        );
+
+        console.log("Projection API:", res.data);
+
+        setProjectionData(res.data || []);
+      } catch (err) {
+        console.error("Projection fetch error:", err);
+        setProjectionData([]);
+      }
+    };
+
+    fetchProjection();
   }, [activeView, selectedProjectionCommissionId]);
 
   // ============================================================================
   // 4. HELPER UTILITIES & VALIDATORS
   // ============================================================================
 
-  /**
+   /**
    * Check if an action is allowed for a given commission status.
    */
   const canPerformAction = (status, action) =>
@@ -396,56 +385,6 @@ const Commissions = () => {
     }
 
     return "";
-  };
-
-  /**
-   * Build timeline chart data for a commission agreement.
-   *
-   * Terminology:
-   * - term: contract length in months
-   * - paidSoFar: total already paid (from payout records)
-   *
-   * This distributes the paid amount sequentially across months, so earlier months
-   * show paid values first.
-   */
-  const buildProjectionTimeline = (agreement, paidSoFar) => {
-    if (!agreement) return [];
-
-    const term = Number(agreement.contractTerm) || 1;
-    const gp =
-      agreement.mrc != null && agreement.sellingPrice != null
-        ? Number(agreement.sellingPrice) - Number(agreement.mrc)
-        : 0;
-
-    const monthlyCommission = gp * ((Number(agreement.commission_percentage) || 0) / 100);
-    const totalExpected = monthlyCommission * term;
-
-    const paid = Math.min(paidSoFar, totalExpected);
-
-    const startDate = agreement.start_date ? new Date(agreement.start_date) : new Date();
-
-    const formatMonthYear = (d) =>
-      d.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
-
-    const data = [];
-
-    for (let month = 0; month < term; month += 1) {
-      const monthStartPaid = Math.min(paid, monthlyCommission * (month + 1));
-      const monthEndPaid = Math.min(paid, monthlyCommission * month);
-      const paidForMonth = monthStartPaid - monthEndPaid;
-      const remainingForMonth = Math.max(monthlyCommission - paidForMonth, 0);
-
-      const monthLabelDate = new Date(startDate);
-      monthLabelDate.setMonth(monthLabelDate.getMonth() + month);
-
-      data.push({
-        month: formatMonthYear(monthLabelDate),
-        paid: paidForMonth,
-        remaining: remainingForMonth,
-      });
-    }
-
-    return data;
   };
 
   // ============================================================================
@@ -783,12 +722,10 @@ const Commissions = () => {
   );
 
   // Projection view: only show circuits the current user can SEE (for non-admin/finance users)
-  const isAgreementVisible = (agreement) => {
+  const isAgreementVisible = useCallback((agreement) => {
     if (userRole === "admin" || userRole === "finance") return true;
-
     if (!agreement) return false;
 
-    // Match by salesperson name, user name, or email (if available)
     const salesName = agreement.salesperson_name?.toLowerCase?.() ?? "";
     const userName = (userIdentifier.name || "").toLowerCase();
 
@@ -796,83 +733,135 @@ const Commissions = () => {
 
     const isIdMatch =
       userIdentifier.id &&
-      (agreement.salesperson_id === userIdentifier.id ||
-        agreement.user_id === userIdentifier.id);
+      (String(agreement.salesperson_id) === String(userIdentifier.id) ||
+        String(agreement.user_id) === String(userIdentifier.id));
 
-    // If commission record includes an email field, use it too
     const salesEmail = (agreement.salesperson_email || "").toLowerCase();
     const userEmail = (userIdentifier.email || "").toLowerCase();
 
-    return isNameMatch || isIdMatch || (salesEmail && userEmail && salesEmail === userEmail);
-  };
+    return (
+      isNameMatch ||
+      isIdMatch ||
+      (salesEmail && userEmail && salesEmail === userEmail)
+    );
+  }, [userRole, userIdentifier]);
 
-  const projectionAgreements = commissions.filter(isAgreementVisible);
+  const projectionAgreements = useMemo(() => {
+    return commissions.filter(isAgreementVisible);
+  }, [commissions, isAgreementVisible]);
 
-  // Projection view: selected agreement (filtered by visibility)
-  const selectedProjectionAgreement = projectionAgreements.find(
-    (c) => String(c.id) === String(selectedProjectionCommissionId)
-  );
+  const selectedProjectionAgreement = useMemo(() => {
+    return projectionAgreements.find(
+      (c) => String(c.id) === String(selectedProjectionCommissionId)
+    );
+  }, [projectionAgreements, selectedProjectionCommissionId]);
 
   // Ensure the selected projection agreement is always valid for the current user and view
   useEffect(() => {
     if (activeView !== "Projections") return;
 
-    if (!selectedProjectionCommissionId && projectionAgreements.length > 0) {
-      setSelectedProjectionCommissionId(String(projectionAgreements[0].id));
+    if (!projectionAgreements.length) return;
+
+    if (!selectedProjectionCommissionId) {
+      setSelectedProjectionCommissionId(
+        String(projectionAgreements[0].id)
+      );
       return;
     }
 
-    if (
-      selectedProjectionCommissionId &&
-      !projectionAgreements.some(
-        (c) => String(c.id) === String(selectedProjectionCommissionId)
-      )
-    ) {
+    const exists = projectionAgreements.some(
+      (c) => String(c.id) === String(selectedProjectionCommissionId)
+    );
+
+    if (!exists) {
       setSelectedProjectionCommissionId(
-        projectionAgreements.length > 0
-          ? String(projectionAgreements[0].id)
-          : ""
+        String(projectionAgreements[0].id)
       );
     }
   }, [
     activeView,
-    projectionAgreements,
+    projectionAgreements.length, // ✅ stable
     selectedProjectionCommissionId,
   ]);
 
-  // NOTE: Use the full payouts list (not date-filtered) to correctly compute paid totals
-  const projectionPaidTotal = payouts.reduce((sum, p) => {
-    if (String(p?.commission_id) === String(selectedProjectionCommissionId)) {
-      return sum + (Number(p.commission_value) || 0);
+  // ============================================================================
+  // PROJECTIONS: COMPUTED / DERIVED DATA
+  // ============================================================================
+  
+  // Debug logging for troubleshooting projection dropdown issues
+    useEffect(() => {
+      console.log("[DEBUG] commissions:", commissions);
+      console.log("[DEBUG] userIdentifier:", userIdentifier);
+      console.log("[DEBUG] projectionAgreements:", projectionAgreements);
+    }, [commissions, userIdentifier, projectionAgreements]);
+
+  // const projectionContractTerm = Number(selectedProjectionAgreement?.contractTerm) || 0;
+  // const projectionSellingPrice = Number(selectedProjectionAgreement?.sellingPrice) || 0;
+  // const projectionMrc = Number(selectedProjectionAgreement?.mrc) || 0;
+  // const projectionCommissionPct = Number(selectedProjectionAgreement?.commission_percentage) || 0;
+  // const projectionTotalContractValue = projectionSellingPrice * projectionContractTerm;
+
+  // const projectionGp = projectionSellingPrice - projectionMrc;
+  // const projectionMonthlyCommission = projectionGp * (projectionCommissionPct / 100);
+
+  const projectionChartData = useMemo(() => {
+    return projectionData.map((item) => ({
+      month: new Date(item.period_end).toLocaleDateString("en-GB", {
+        month: "short",
+        year: "numeric",
+      }),
+      paid: Number(item.paid || 0),
+      remaining: Number(item.remaining || 0),
+      type: item.type || "actual", // ✅ preserved
+    }));
+  }, [projectionData]);
+
+  // Projection totals for stat cards
+  const projectionStats = useMemo(() => {
+    if (!selectedProjectionAgreement) {
+      return {
+        totalContractValue: 0,
+        totalCommission: 0,
+        paid: 0,
+        remaining: 0,
+      };
     }
-    return sum;
-  }, 0);
 
-  const projectionChartData = buildProjectionTimeline(
-    selectedProjectionAgreement,
-    projectionPaidTotal
-  );
+    const contractTerm =
+      Number(selectedProjectionAgreement.contractTerm) || 0;
 
-  // Projection stat cards (computed values)
-  const projectionContractTerm = Number(selectedProjectionAgreement?.contractTerm) || 0;
-  const projectionSellingPrice = Number(selectedProjectionAgreement?.sellingPrice) || 0;
-  const projectionMrc = Number(selectedProjectionAgreement?.mrc) || 0;
-  const projectionCommissionPct = Number(
-    selectedProjectionAgreement?.commission_percentage
-  )
-    ? Number(selectedProjectionAgreement.commission_percentage)
-    : 0;
+    const sellingPrice =
+      Number(selectedProjectionAgreement.sellingPrice) || 0;
 
-  const projectionTotalContractValue = projectionSellingPrice * projectionContractTerm;
-  const projectionGp = projectionSellingPrice - projectionMrc;
-  const projectionMonthlyCommission =
-    projectionGp * (projectionCommissionPct / 100);
-  const projectionTotalCommission = projectionMonthlyCommission * projectionContractTerm;
-  const projectionCommissionPaid = projectionPaidTotal;
-  const projectionCommissionRemaining = Math.max(
-    projectionTotalCommission - projectionCommissionPaid,
-    0
-  );
+    const mrc = Number(selectedProjectionAgreement.mrc) || 0;
+
+    const commissionPct =
+      Number(selectedProjectionAgreement.commission_percentage) || 0;
+
+    const totalContractValue = sellingPrice * contractTerm;
+
+    const totalCommission = projectionChartData.reduce(
+      (sum, m) => sum + m.paid + m.remaining,
+      0
+    );
+
+    const paid = projectionChartData.reduce(
+      (sum, m) => sum + m.paid,
+      0
+    );
+
+    const remaining = projectionChartData.reduce(
+      (sum, m) => sum + m.remaining,
+      0
+    );
+
+    return {
+      totalContractValue,
+      totalCommission,
+      paid,
+      remaining,
+    };
+  }, [selectedProjectionAgreement, projectionChartData]);
 
   // ============================================================================
   // 10. RENDER
@@ -1107,33 +1096,29 @@ const Commissions = () => {
                   </div>
                 </div>
 
-                {selectedProjectionAgreement ? (
+                {selectedProjectionAgreement && (
                   <>
                     <div className="flex flex-wrap gap-4 mb-6">
                       <StatCard
                         title="Total Contract Value"
-                        amount={projectionTotalContractValue}
+                        amount={projectionStats.totalContractValue}
                       />
                       <StatCard
                         title="Total Commission"
-                        amount={projectionTotalCommission}
+                        amount={projectionStats.totalCommission}
                       />
                       <StatCard
                         title="Commission Paid"
-                        amount={projectionCommissionPaid}
+                        amount={projectionStats.paid}
                       />
                       <StatCard
                         title="Commission Remaining"
-                        amount={projectionCommissionRemaining}
+                        amount={projectionStats.remaining}
                       />
                     </div>
 
                     <CommissionTimelineChart data={projectionChartData} />
                   </>
-                ) : (
-                  <p className="text-center text-gray-500">
-                    Select a circuit to view projections.
-                  </p>
                 )}
               </>
             )}

@@ -1379,7 +1379,7 @@ def reverse_commissions():
             "message": str(e)
         }), 400
     
-# 2. Pay Commissions View
+# 2. Payout Summary View
 @app.route("/api/commissions/payout_summary", methods=["GET"])
 @jwt_required()
 @role_required(['admin', 'sales', 'finance', 'technician'])
@@ -1404,7 +1404,37 @@ def commissions_paid_summary():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
-#3. PROJECTION VIEW - this is the view that shows the projected commissions for the next 12 months based on current active commissions and their end dates.
+#3. PROJECTION VIEW 
+@app.route("/api/commissions/projections/<int:commission_id>", methods=["GET"])
+@jwt_required()
+@role_required(['admin', 'sales', 'finance', 'technician'])
+def commission_projection(commission_id):
+    try:
+        claims = get_jwt()
+        user_id = claims.get("sub")
+        role = claims.get("role")
+
+        print(f'Role: {role}, User ID: {user_id} is requesting projection for commission ID: {commission_id}')
+
+
+        # --------------------------------------------------------------
+        # Get projection data (access control is handled in the query)
+        # --------------------------------------------------------------
+        data = db.get_commission_projection(commission_id, user_id, role)
+        print(f"Projection request for commission ID {commission_id} by user {user_id} with role {role}")
+        print("Commission projection data:")
+        # pprint(data)
+        if not data:
+            # If no data is returned, treat as unauthorized for non-admin/finance
+            if role not in ("admin", "finance"):
+                return jsonify({"error": "Unauthorized"}), 403
+        return jsonify(data), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# 4. Analytics View - this is the data for the charts in the Analytics tab. It includes monthly summaries, outstanding commissions, pipeline, and salesperson performance.
+# TO DO: Build Frontend for this and add more analytics endpoints as needed.
 @app.route("/api/commissions/analytics/monthly", methods=["GET"])
 @jwt_required()
 @role_required(['admin', 'finance'])

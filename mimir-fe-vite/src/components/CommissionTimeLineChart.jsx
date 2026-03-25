@@ -1,16 +1,7 @@
 import React from "react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  Legend
-} from "recharts";
+import {BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, Cell} from "recharts";
 
 function CommissionTimelineChart({ data }) {
-
   const formatCurrency = (v) => `R ${Number(v).toLocaleString()}`;
 
   return (
@@ -19,40 +10,39 @@ function CommissionTimelineChart({ data }) {
 
       <ResponsiveContainer>
         <BarChart
-          layout="horizontal"
           data={data}
           margin={{ top: 5, right: 20, left: 40, bottom: 5 }}
         >
+          <XAxis dataKey="month"/>
 
-          <XAxis
-            type="category"
-            dataKey="month"
-            width={80}
+          <YAxis tickFormatter={(v) => `R${v}`} />
+
+          <Tooltip
+            formatter={(value, name) => [formatCurrency(value), name]}
+            labelFormatter={(label) => `Month: ${label}`}
           />
-
-          <YAxis
-            type="number"
-            tickFormatter={(v) => `R${v}`}
-          />
-
-          <Tooltip formatter={(v) => formatCurrency(v)} />
 
           <Legend />
 
-          <Bar
-            dataKey="paid"
-            name="Paid"
-            stackId="a"
-            fill="#4ade80"
-          />
+          {/* Paid */}
+          <Bar dataKey="paid" name="Paid" stackId="a" fill="#22c55e">
+          {data.map((entry, index) => (
+            <Cell
+              key={`paid-${index}`}
+              fill={entry.type === "projected" ? "#86efac" : "#22c55e"}
+            />
+          ))}
+        </Bar>
 
-          <Bar
-            dataKey="remaining"
-            name="Remaining"
-            stackId="a"
-            fill="#f87171"
-          />
-
+          {/* Remaining */}
+          <Bar dataKey="remaining" name="Remaining" stackId="a" fill="#ef4444">
+            {data.map((entry, index) => (
+              <Cell
+                key={`remaining-${index}`}
+                fill={entry.type === "projected" ? "#fca5a5" : "#ef4444"}
+              />
+            ))}
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
     </div>
