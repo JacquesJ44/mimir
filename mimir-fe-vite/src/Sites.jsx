@@ -1,5 +1,6 @@
 import axios from "./AxiosInstance.js";
 import { useState } from "react";
+import toast from 'react-hot-toast';
 import { Link } from 'react-router-dom';
 import { ListFilter, Plus, MapPin, Landmark, Globe, StretchHorizontal, Fence, Building, Building2 } from "lucide-react";
 
@@ -46,11 +47,11 @@ const Sites = () => {
         })
         .catch(err => {
             console.error('Error:', err.response ? err.response.data : err);
-            alert(err.response?.data?.error || 'Something went wrong');
+            toast.error(err.response?.data?.error || 'Something went wrong');
         })
         .catch((error) => {
             console.error("Search error:", error);
-            alert("Something went wrong while searching.");
+            toast.error("Something went wrong while searching.");
         });
     }
 

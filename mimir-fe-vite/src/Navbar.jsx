@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import axios from './AxiosInstance.js';
 import { jwtDecode } from 'jwt-decode';
+import toast from 'react-hot-toast';
 
 const Navbar = ({ token, setToken, message, setMessage }) => {
 
@@ -82,7 +83,7 @@ const Navbar = ({ token, setToken, message, setMessage }) => {
           navigate('/login');
         } catch (err) {
           console.error('Logout failed:', err);
-          alert('Logout failed.');
+          toast.error('Logout failed.');
         }
       };
 

@@ -6,8 +6,6 @@ from zoneinfo import ZoneInfo
 import pymysql
 from decimal import Decimal
 
-from pprint import pprint
-
 TZ = ZoneInfo("Africa/Johannesburg")
 
 # This function is used to describe changes between two dictionaries - used for logging

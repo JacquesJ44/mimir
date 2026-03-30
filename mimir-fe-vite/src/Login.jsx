@@ -1,6 +1,7 @@
 import axios from "./AxiosInstance.js";
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import toast from 'react-hot-toast';
 
 const Login = ({ setToken }) => {
 
@@ -21,7 +22,7 @@ const handleSubmit = async e => {
     navigate('/circuits');
   } catch (error) {
       // console.log(error);
-      alert(error.response.data.msg);
+      toast.error(error.response.data.msg);
   }
 };
 

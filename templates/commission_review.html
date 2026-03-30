@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Review Commission</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #f8fafc;
+      display: flex;
+      justify-content: center;
+      padding: 2rem;
+      margin: 0;
+    }
+    .card {
+      background: white;
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+      max-width: 550px;
+      width: 100%;
+    }
+    h1 { font-size: 1.25rem; color: #1f2937; margin-bottom: 0.5rem; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { border: 1px solid #ddd; padding: 8px; font-size: 14px; text-align: left; }
+    th { background: #f3f4f6; }
+    .actions { text-align: center; margin-top: 1.5rem; }
+    button {
+      padding: 12px 22px;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 14px;
+      color: white;
+      cursor: pointer;
+    }
+    .btn-approve { background: #16a34a; }
+    .btn-approve:hover { background: #22c55e; }
+    .btn-reject { background: #ef4444; display: block; max-width: 260px; margin: 6px auto; width: 100%; }
+    .btn-reject:hover { background: #dc2626; }
+    .section-label { margin: 12px 0 6px; font-weight: 600; color: #334155; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Commission Approval Review</h1>
+    <p>Please review the details below and confirm your action.</p>
+
+    <table>
+      <tr><th>Salesperson</th><td>{{ commission.salesperson_name }}</td></tr>
+      <tr><th>Circuit Number</th><td>{{ commission.circuitNumber }}</td></tr>
+      <tr><th>Client</th><td>{{ commission.siteB_name }}</td></tr>
+      <tr><th>MRC (R)</th><td>{{ commission.mrc }}</td></tr>
+      <tr><th>Selling Price (R)</th><td>{{ commission.sellingPrice }}</td></tr>
+      <tr><th>Commission (%)</th><td>{{ commission.commission_percentage }}</td></tr>
+      <tr><th>Term (Months)</th><td>{{ commission.contractTerm }}</td></tr>
+      <tr><th>Notes</th><td>{{ commission.notes or '-' }}</td></tr>
+    </table>
+
+    <!-- Approve -->
+    <div class="actions">
+      <form method="POST" action="/api/commissions/approve">
+        <input type="hidden" name="token" value="{{ token }}" />
+        <input type="hidden" name="approve" value="true" />
+        <button type="submit" class="btn-approve">Approve Commission</button>
+      </form>
+    </div>
+
+    <!-- Reject with reason -->
+    <p class="section-label">Reject with reason:</p>
+    {% for key, label in rejection_reasons.items() %}
+    <form method="POST" action="/api/commissions/approve" style="margin:0;">
+      <input type="hidden" name="token" value="{{ token }}" />
+      <input type="hidden" name="approve" value="false" />
+      <input type="hidden" name="reason" value="{{ key }}" />
+      <button type="submit" class="btn-reject">{{ label }}</button>
+    </form>
+    {% endfor %}
+  </div>
+</body>
+</html>

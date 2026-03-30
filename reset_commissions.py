@@ -4,5 +4,9 @@
 
 from app import db
 from datetime import date
+import logging
+
+logger = logging.getLogger(__name__)
+
 db.reset_expired_pending_commissions()
-print("All expired pending commissions have been reset" + date.today().strftime(" (%Y-%m-%d)"))
+logger.info("All expired pending commissions have been reset (%s)", date.today().strftime("%Y-%m-%d"))

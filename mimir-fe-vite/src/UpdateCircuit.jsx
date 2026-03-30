@@ -1,6 +1,7 @@
 import axios from "./AxiosInstance.js";
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import toast from 'react-hot-toast';
 import { addMonths, subDays, parseISO, format, isValid,set } from 'date-fns';
 
 const UpdateCircuit = () => {
@@ -168,7 +169,7 @@ const UpdateCircuit = () => {
                 );
 
                 if (res.status === 204) {
-                alert("No changes made to the circuit.");
+                toast("No changes made to the circuit.");
                 navigate("/circuits");
                 return;
                 }
@@ -189,7 +190,7 @@ const UpdateCircuit = () => {
                     });
                 } catch (uploadErr) {
                     console.error("Upload failed:", uploadErr);
-                    alert("Circuit updated, but file upload failed.");
+                    toast.error("Circuit updated, but file upload failed.");
                 }
                 }
 
@@ -202,7 +203,7 @@ const UpdateCircuit = () => {
 
                 const errorMsg =
                 err.response?.data?.error || "Failed to update circuit.";
-                alert(errorMsg);
+                toast.error(errorMsg);
             }
             };
 

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from './AxiosInstance';
+import toast from 'react-hot-toast';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -12,11 +13,11 @@ export default function ForgotPassword() {
 
     try {
         const res = await axios.post('/api/forgot-password', { email });
-        alert(res.data.message);
+        toast.success(res.data.message);
         navigate('/login');
   } catch (err) {
         console.error(err);
-        alert('An error occurred.');
+        toast.error('An error occurred.');
   }
   };
 

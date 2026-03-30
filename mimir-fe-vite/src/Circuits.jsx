@@ -1,5 +1,6 @@
 import axios from "./AxiosInstance.js";
 import { useState, useEffect } from "react";
+import toast from 'react-hot-toast';
 import { Link } from 'react-router-dom';
 import moments from "moment";
 import { Building, Hash, User, CalendarDays, MapPin, ToggleRight, ListFilter, Plus, Cable, Microchip, BrushCleaning } from 'lucide-react';
@@ -83,11 +84,11 @@ const Circuits = () => {
         })
         .catch(err => {
             console.error('Error:', err.response ? err.response.data : err);
-            alert(err.response?.data?.error || 'Something went wrong');
+            toast.error(err.response?.data?.error || 'Something went wrong');
         })
         .catch((error) => {
             console.error("Search error:", error);
-            alert("Something went wrong while searching.");
+            toast.error("Something went wrong while searching.");
         });
     }
 

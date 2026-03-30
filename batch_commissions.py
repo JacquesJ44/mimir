@@ -19,8 +19,6 @@ load_dotenv()
 
 from db import DbUtil
 
-from pprint import pprint
-
 
 db = DbUtil({
     'host': os.getenv('DB_HOST'),

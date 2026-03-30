@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 
 import './App.css';
 import PrivateRoute from './PrivateRoute.jsx';
@@ -27,6 +28,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <Toaster position="top-right" />
       <div className="min-h-screen flex flex-col bg-base-200">
         <Navbar token={token} setToken={setToken} message={message} setMessage={setMessage}/>
         

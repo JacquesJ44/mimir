@@ -2,7 +2,10 @@ from flask import Flask
 from flask import jsonify, request, make_response, send_file, send_from_directory, render_template, current_app
 from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, unset_jwt_cookies, jwt_required, JWTManager, verify_jwt_in_request, set_access_cookies
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from flask_mail import Mail, Message
+from flask_talisman import Talisman
 from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
 from itsdangerous import URLSafeTimedSerializer
@@ -14,7 +17,10 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from functools import wraps
 from zoneinfo import ZoneInfo
 
+import bcrypt
 import hashlib
+import hmac
+import logging
 import random
 import secrets
 import binascii
@@ -22,13 +28,27 @@ import json
 import os
 import re
 
-from pprint import pprint
-
 from db import DbUtil
 from utils import describe_changes_log, CycleManager, get_commission_dashboard, get_commission_monthly_summary, get_commission_outstanding, get_commission_pipeline, get_salesperson_commission_totals, parse_date, parse_decimal
 
 # Load variables from .env
 load_dotenv()
+
+# Validate required environment variables at startup
+
+# Required env vars, but DB_PASSWORD may be intentionally blank
+_REQUIRED_ENV = [
+    'DB_HOST', 'DB_USER', 'DB_NAME',
+    'SECRET_KEY', 'JWT_SECRET_KEY',
+    'MAIL_SERVER', 'MAIL_PORT', 'MAIL_USERNAME', 'MAIL_PASSWORD',
+    'RECIPIENT_EMAIL', 'APP_BASE_URL',
+]
+_missing = [v for v in _REQUIRED_ENV if not os.getenv(v)]
+# DB_PASSWORD must be present (could be empty string), not None
+if 'DB_PASSWORD' not in os.environ:
+    _missing.append('DB_PASSWORD')
+if _missing:
+    raise RuntimeError(f"Missing required environment variables: {', '.join(_missing)}")
 
 db = DbUtil({
     'host': os.getenv('DB_HOST'),
@@ -54,16 +74,33 @@ REJECTION_REASONS = {
     "other": "Other"
 }
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(name)s: %(message)s',
+)
+logger = logging.getLogger(__name__)
+
 app = Flask(
     __name__,
     static_folder=REACT_BUILD_DIR,
     static_url_path=""
 )
 
+# 10 MB upload limit
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
+
 cm = CycleManager(TZ)
 
-# Apply CORS immediately after app creation
-CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": "*"}}, allow_headers=["Content-Type", "Authorization"])
+# Rate limiting
+limiter = Limiter(get_remote_address, app=app, default_limits=["200 per minute"], storage_uri="memory://")
+
+# Apply CORS — restrict origins to configured domains (comma-separated in env)
+CORS_ORIGINS = [o.strip() for o in os.getenv('CORS_ORIGINS', '').split(',') if o.strip()]
+CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": CORS_ORIGINS}}, allow_headers=["Content-Type", "Authorization"])
+
+# Security headers (CSP disabled since Flask serves React SPA; other headers still apply)
+Talisman(app, content_security_policy=None, force_https=False)
 
 # Secret Keys
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
@@ -135,27 +172,25 @@ def role_required(required_roles):
         return decorator
     return wrapper
 
-# Hash the password
+# Hash the password using bcrypt
 def hash_password(password):
-    salt = hashlib.sha256(os.urandom(60)).hexdigest().encode('ascii')
-    pwdhash = hashlib.pbkdf2_hmac('sha512', password.encode('utf-8'), salt, 100000)
-    pwdhash = binascii.hexlify(pwdhash)
-    return (salt + pwdhash).decode('ascii')
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('ascii')
 
-# Verify the password
+# Verify the password — supports both bcrypt and legacy PBKDF2 hashes
 def verify_password(stored_password, provided_password):
-    # Extract the salt from the stored password (first 64 characters = 32 bytes = 64 hex chars)
+    # bcrypt hashes always start with '$2b$' (or '$2a$'/'$2y$')
+    if stored_password.startswith(('$2b$', '$2a$', '$2y$')):
+        return bcrypt.checkpw(
+            provided_password.encode('utf-8'),
+            stored_password.encode('ascii')
+        )
+
+    # Legacy PBKDF2 path — kept for existing users until they reset/change password
     salt = stored_password[:64].encode('ascii')
-    
-    # Extract the actual hash from the stored password
     stored_pwdhash = stored_password[64:]
-    
-    # Recompute the hash using the provided password and the same salt
     pwdhash = hashlib.pbkdf2_hmac('sha512', provided_password.encode('utf-8'), salt, 100000)
     pwdhash = binascii.hexlify(pwdhash).decode('ascii')
-    
-    # Compare the hashes
-    return pwdhash == stored_pwdhash
+    return hmac.compare_digest(pwdhash, stored_pwdhash)
 
 # Function to refresh JWT
 @app.after_request
@@ -188,9 +223,9 @@ def send_reset_email(app, email, reset_url):
                     """
         try:
             mail.send(msg)
-            print("Email sent!")
+            logger.info("Password reset email sent to %s", email)
         except Exception as e:
-            print("Failed to send email:", e)
+            logger.error("Failed to send email: %s", e)
 
 def validate_decimal_field(value, field_name):
     if value in (None, ''):
@@ -236,6 +271,7 @@ def send_async_email_to_salesperson(app, msg):
 #========================================================================================================================
 #Login Route
 @app.route('/api/login', methods=['POST'])
+@limiter.limit("10 per minute")
 def login():
     if not request.is_json:
         return jsonify({"msg": "Invalid request: JSON required"}), 400
@@ -243,10 +279,8 @@ def login():
     data = request.get_json()
     email = data.get('email')
     password = data.get('password')
-    # pprint(data)
     
     row = db.get_user_by_email(email)
-    # pprint(row)
 
     if not row:
        return jsonify({"msg": "User with this email does not exist"}), 400
@@ -275,12 +309,13 @@ def login():
             details=f"{row['name']} {row['surname']} logged in to Mimir."
         )
     except Exception as e:
-        print(f"⚠️ Logging error: {e}")
+        logger.warning("Logging error: %s", e)
 
     return jsonify({"access_token": access_token}), 200
 
 # Route for forgotten password
 @app.route('/api/forgot-password', methods=['POST'])
+@limiter.limit("5 per minute")
 def forgot_password():
     data = request.get_json()
     email = data.get('email')
@@ -290,7 +325,8 @@ def forgot_password():
     if user:
         token = serializer.dumps(email, salt='password-reset')
         # reset_url = url_for('reset_password', token=token, _external=True)
-        reset_url = f"http://mimir.aesir.co.za/reset-password/{token}"
+        base_url = os.getenv('APP_BASE_URL', '').rstrip('/')
+        reset_url = f"{base_url}/reset-password/{token}"
 
         # Launch email sending in a background thread
         Thread(target=send_reset_email, args=(app, email, reset_url)).start()
@@ -327,7 +363,6 @@ def logout():
 @role_required(['admin'])
 def register():
     data = request.get_json()
-    # pprint(data)
 
     row = db.get_user_by_email(data['email'])
     if row is not None:
@@ -357,13 +392,12 @@ def navbar():
 @jwt_required()
 @role_required(['admin', 'sales', 'finance'])
 def circuits_grouped_by_vendor_and_type():
-    # print("🚀 API HIT: /api/dashboard")
     try:
         result = db.get_all_circuits_grouped_by_vendor_and_type()
-        # pprint(result)
         return jsonify(result)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.exception("Dashboard error")
+        return jsonify({"error": "Internal server error"}), 500
     
 @app.route('/api/dashboard/vendor/<vendor_name>', methods=['GET'])
 @jwt_required()
@@ -372,12 +406,18 @@ def get_vendor_circuits(vendor_name):
     circuits = db.get_circuits_by_vendor(vendor_name)  # write this function
     return jsonify(circuits)
 
+# Allowed search keys for circuit/site queries
+CIRCUIT_SEARCH_KEYS = frozenset({
+    'vendor', 'circuitType', 'speed', 'circuitNumber', 'circuitOwner',
+    'usageFlag', 'enni', 'vlan', 'startDate', 'contractTerm',
+    'endDate', 'mrc', 'sellingPrice', 'status', 'comments', 'site',
+})
+
 @app.route('/api/circuits', methods=['GET', 'POST'])
 @jwt_required()
 @role_required(['admin', 'sales', 'technician'])
 def circuits():
     obj = request.get_json()
-    # pprint(obj)
 
     if not any(obj.values()):
         return jsonify({"error": "Please enter at least one search parameter"}), 404
@@ -396,6 +436,8 @@ def circuits():
 
     for key, value in obj.items():
         if value:
+            if key not in CIRCUIT_SEARCH_KEYS:
+                continue
             if key == "endDate":
                 filters.append("endDate <= %s")
                 values.append(value)
@@ -418,22 +460,30 @@ def circuits():
         return jsonify(rows), 200
     return jsonify({"error": "No entries found"}), 404
 
+SITE_SEARCH_KEYS = frozenset({
+    'site', 'reference', 'building', 'street', 'number',
+    'suburb', 'city', 'postcode', 'province',
+})
+
 @app.route('/api/sites', methods=['GET', 'POST'])
 @jwt_required()
 @role_required(['admin', 'sales', 'technician'])
 def sites():
     obj = request.get_json()
-    # pprint(obj)
 
     if not any(obj.values()):
         return jsonify({"error": "Please enter at least one search parameter"}), 404
     
     query = 'SELECT * FROM sites WHERE '
+    filtered_values = []
     for key, value in obj.items():
         if value:
+            if key not in SITE_SEARCH_KEYS:
+                continue
             query += f'{key} LIKE %s AND '
+            filtered_values.append(f'%{value}%')
     query = query.rstrip(' AND ')
-    rows = db.search_similar_site(query, tuple('%' + value + '%' for value in obj.values() if value))
+    rows = db.search_similar_site(query, tuple(filtered_values))
     if rows:
         return jsonify(rows), 200
     return jsonify({"error": "No entries found"}), 404
@@ -444,14 +494,11 @@ def sites():
 def addcircuit():
     if request.method == 'GET':
         data = db.get_salesperson()
-        # pprint(data)
         return jsonify(data)
 
     if request.method == 'POST':
 
         data = request.get_json()
-        # print("Received data for new circuit:")
-        # pprint(data)
 
         # Handle nullable dates safely
         start_date = data.get('startDate') or None
@@ -541,8 +588,8 @@ def addcircuit():
             return make_response({"msg": "Circuit successfully added"}, 200)
         
         except Exception as e:
-            print(f"Database error: {e}")
-            return make_response({"error": "Unable to save circuit: Database error: " + str(e)}, 500)
+            logger.exception("Error saving circuit")
+            return make_response({"error": "Unable to save circuit"}, 500)
 
 @app.route('/api/upload', methods=['POST'])
 @jwt_required()
@@ -573,17 +620,16 @@ def upload():
         file.save(destination)
         return make_response(jsonify({"msg": "Document uploaded successfully!"}), 200)
     except Exception as e:
-        return make_response(jsonify({"error": f"Failed to save file: {str(e)}"}), 500)
+        logger.exception("File upload error")
+        return make_response(jsonify({"error": "Failed to save file"}), 500)
     
 @app.route('/api/sites/addsite', methods=['GET', 'POST'])
 @jwt_required()
 @role_required(['admin', 'sales', 'technician'])
 def addsite():
     obj = request.get_json()
-    # pprint(obj)
 
     exists = db.search_site(obj['site'])
-    # pprint(exists)
 
     if exists:
         return jsonify({"msg": "Site already exists"}), 406
@@ -609,8 +655,6 @@ def addsite():
 def view_circuit(id):
     data = db.search_circuit_to_view(id)
 
-    # print("DATA:")
-    # pprint(data)
     if data:
         return jsonify(data)
     return jsonify({'error': 'Circuit not found'}), 404
@@ -621,7 +665,6 @@ def view_circuit(id):
 def view_site(site):
     if request.method == 'GET':
         data = db.search_site_to_view(site)
-        # pprint(data)
         if data:
             return jsonify(data)
         return jsonify({'error': 'Site not found'}), 404
@@ -655,7 +698,8 @@ def update_circuit(id):
             })
 
         except Exception as e:
-            return jsonify({'error': str(e)}), 5004
+            logger.exception("Error fetching circuit")
+            return jsonify({'error': 'Internal server error'}), 500
 
     if request.method == 'PUT':
         data = request.get_json()
@@ -738,7 +782,6 @@ def update_circuit(id):
             elif old_salesperson and (new_salesperson != old_salesperson or circuit_changed):
                 # Expire old active/pending commission
                 existing_commission = db.get_current_commission(circuit_id=id)
-                # print("Current commission to expire:", existing_commission)
                 if existing_commission:
                     db.expire_active_commission(
                         circuit_id=id,
@@ -797,9 +840,9 @@ def update_circuit(id):
             return jsonify({'message': 'Circuit updated successfully'}), 200
 
         except Exception as e:
-            print(f"Database error: {e}")
+            logger.exception("Database error updating circuit")
             return make_response(
-                {"error": f"Unable to update circuit: {e}"},
+                {"error": "Unable to update circuit"},
                 500
             )
 
@@ -808,7 +851,6 @@ def update_circuit(id):
 @role_required(['admin', 'sales', 'technician'])
 def download(id):
     row = db.search_circuit_to_view(id)
-    # pprint(row)
     
     if not row or 'doc' not in row or not row['doc']:
         return jsonify({"error": "No document associated with this record"}), 404
@@ -817,8 +859,6 @@ def download(id):
     target = os.path.join(UPLOAD_FOLDER, file)
 
     if os.path.exists(target):
-        # print("Serving file:", target)
-        # print("File size:", os.path.getsize(target))
         response = make_response(send_file(target, mimetype='application/pdf', as_attachment=False))
         response.headers['Content-Disposition'] = f'inline; filename="{file}"'
         return response
@@ -838,13 +878,11 @@ def get_site():
 @role_required(['admin'])
 def view_logs():
     try:
-        # print("VIEW_LOGS ROUTE HIT ✅")
         rows = db.view_logs()
-        # pprint(rows)
         return jsonify(rows)
     except Exception as e:
-        print("ERROR:", str(e))
-        return jsonify({"error": str(e)}), 500
+        logger.exception("Error fetching logs")
+        return jsonify({"error": "Internal server error"}), 500
     
 @app.route('/api/commissions', methods=['GET'])
 @jwt_required()
@@ -855,10 +893,6 @@ def get_commissions():
         user_id = claims.get("sub")
         role = claims.get("role")
 
-        # print("GET_COMMISSIONS ROUTE HIT ✅")
-        # print("User claims:")
-        # pprint(claims)
-        # print(f"User ID: {user_id}, Role: {role}")
 
         if role in ('admin', 'finance'):
             rows = db.get_all_commissions()
@@ -868,11 +902,11 @@ def get_commissions():
             # technicians or others see nothing by default
             rows = []
 
-        # pprint(rows)
         return jsonify(rows), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.exception("Error fetching commissions")
+        return jsonify({"error": "Internal server error"}), 500
 
 #==============================================================================    
 # COMMISSION AUTO-PAYOUT TIMER & KILL SWITCH ROUTES
@@ -889,7 +923,6 @@ def get_kill_switch():
         auto_payout_enabled = raw.strip().lower() in ("on", "true", "1", "yes")
     elif isinstance(raw, (int, float, bool)):
         auto_payout_enabled = bool(raw)
-    # print(f"Kill switch raw value: {raw}, interpreted as: {auto_payout_enabled}")
     return jsonify({"autoPayoutEnabled": bool(auto_payout_enabled)}), 200
 
 # POST: Set the kill-switch state, store consistently, and return boolean
@@ -910,7 +943,7 @@ def set_kill_switch():
     return jsonify({"status": "ok", "autoPayoutEnabled": auto_payout_enabled}), 200
 
 @app.route("/api/commissions/cycle-status")
-# @jwt_required()
+@jwt_required()
 def commissions_status():
     # Get cycle status dict from CycleManager
     cycle = cm.commission_status()
@@ -954,8 +987,6 @@ def apply_commission():
 
     # 1️⃣ Fetch commission
     commission = db.get_commission_by_id(commission_id)
-    # print("Fetched commission:")
-    # pprint(commission)
 
     if not commission:
         return jsonify({"error": "Commission not found"}), 404
@@ -995,14 +1026,7 @@ def apply_commission():
             gp * (new_percentage / Decimal(100))
         ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-        approve_url = (
-            f"{os.getenv('APP_BASE_URL')}/api/commissions/approve?token={token}&approve=true"
-        )
-         # Generate reject links
-        reject_links = {
-            key: f"{os.getenv('APP_BASE_URL')}/api/commissions/approve?token={token}&approve=false&reason={key}"
-            for key in REJECTION_REASONS
-        }
+        review_url = f"{os.getenv('APP_BASE_URL')}/api/commissions/review?token={token}"
         
         # 4️⃣ Send email to manager
         msg = Message(
@@ -1019,9 +1043,7 @@ def apply_commission():
                 indicative_value=indicative_value,
                 months=commission["contractTerm"],
                 notes=commission["notes"],
-                approve_url=approve_url,
-                reject_links=reject_links,
-                rejection_reasons=REJECTION_REASONS
+                review_url=review_url,
             )
         )
 
@@ -1030,19 +1052,16 @@ def apply_commission():
         return jsonify({"message": "Commission submitted for approval"}), 200
 
     except Exception as e:
-        print("Error submitting commission:", e)
+        logger.exception("Error submitting commission")
         return jsonify({"error": "Failed to submit commission"}), 500
 
-@app.route("/api/commissions/approve", methods=["GET"])
-def approve_commission():
+@app.route("/api/commissions/review", methods=["GET"])
+def review_commission():
+    """GET — renders a confirmation page; no state is changed."""
     token = request.args.get("token")
-    approve = request.args.get("approve") == "true"
-    reason_key = request.args.get("reason")  # only for rejects
-
     if not token:
         return "Missing approval token", 400
 
-    # Fetch token row and validate
     token_row = db.get_valid_approval_token(token)
     if not token_row:
         return "Invalid or expired approval link", 400
@@ -1055,17 +1074,54 @@ def approve_commission():
         return "Commission not found", 404
 
     if commission["status"] != "pending":
-        return (
-            f"Invalid commission state '{commission['status']}'. "
-            "This request can no longer be processed."
-        ), 400
+        return "This request can no longer be processed.", 400
 
     # Expiry check
     expires_at = commission.get("expires_at")
     if expires_at:
         expires_at_utc = expires_at.replace(tzinfo=UTC)
-        now_utc = datetime.now(UTC)
-        if expires_at_utc < now_utc:
+        if expires_at_utc < datetime.now(UTC):
+            db.reset_commission(commission["id"])
+            return "Approval link expired. Commission reset.", 410
+
+    return render_template(
+        "commission_review.html",
+        token=token,
+        commission=commission,
+        rejection_reasons=REJECTION_REASONS,
+    )
+
+
+@app.route("/api/commissions/approve", methods=["POST"])
+@limiter.limit("10 per minute")
+def approve_commission():
+    """POST — performs the actual approve/reject action."""
+    token = request.form.get("token")
+    approve = request.form.get("approve") == "true"
+    reason_key = request.form.get("reason")
+
+    if not token:
+        return "Missing approval token", 400
+
+    token_row = db.get_valid_approval_token(token)
+    if not token_row:
+        return "Invalid or expired approval link", 400
+
+    if token_row["used_at"] is not None:
+        return "This approval link has already been used.", 409
+
+    commission = db.get_commission_by_id(token_row["commission_id"])
+    if not commission:
+        return "Commission not found", 404
+
+    if commission["status"] != "pending":
+        return "This request can no longer be processed.", 400
+
+    # Expiry check
+    expires_at = commission.get("expires_at")
+    if expires_at:
+        expires_at_utc = expires_at.replace(tzinfo=UTC)
+        if expires_at_utc < datetime.now(UTC):
             db.reset_commission(commission["id"])
             return "Approval link expired. Commission reset.", 410
 
@@ -1074,9 +1130,10 @@ def approve_commission():
     if not approve:
         reason_text = REJECTION_REASONS.get(reason_key, "No reason provided")
 
-    # Update commission and token
+    # Update commission and mark token used
     if approve:
         db.update_commission_status(commission["id"], "active", payout_hold=0)
+        db.mark_approval_token_used(token)
         gif_url = random.choice(POSITIVE_GIFS)
         title = "Commission Approved"
         message = "The commission has been successfully approved."
@@ -1152,7 +1209,7 @@ def pause_commission():
         return jsonify({"message": "Commission paused successfully"}), 200
 
     except Exception as e:
-        print("Error pausing commission:", e)
+        logger.exception("Error pausing commission")
         return jsonify({"error": "Failed to pause commission"}), 500
 
 @app.route("/api/commissions/resume", methods=["POST"])
@@ -1186,7 +1243,7 @@ def resume_commission():
         return jsonify({"message": "Commission resumed successfully"}), 200
 
     except Exception as e:
-        print("Error resuming commission:", e)
+        logger.exception("Error resuming commission")
         return jsonify({"error": "Failed to resume commission"}), 500
     
 @app.route("/api/commissions/cancel", methods=["POST"])
@@ -1220,7 +1277,7 @@ def cancel_commission():
         return jsonify({"message": "Commission cancelled successfully"}), 200
 
     except Exception as e:
-        print("Error cancelling commission:", e)
+        logger.exception("Error cancelling commission")
         return jsonify({"error": "Failed to cancel commission"}), 500
 
 
@@ -1248,13 +1305,12 @@ def commissions_earnings_summary():
         else:
             summary = []
 
-        # print("Earnings summary:")
-        # pprint(summary)
 
         return jsonify(summary), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.exception("Error fetching earnings summary")
+        return jsonify({"error": "Internal server error"}), 500
     
     
 # Called to pay a commission ledger entry, changing the status of the earned entries to 'paid'
@@ -1310,13 +1366,13 @@ def pay_commissions():
 
     except Exception as e:
         # Log server error
-        print("Payment error:", e)
+        logger.exception("Payment error")
 
         return jsonify({
             "status": "error",
             "paid_entries": paid_count,
             "failed_entries": failed,
-            "message": str(e)
+            "message": "Payment processing failed"
         }), 400
     
 # Called to reverse selected commission ledger entries, changing their status to 'reversed'
@@ -1371,12 +1427,12 @@ def reverse_commissions():
         }), 207
 
     except Exception as e:
-        print("Reversal error:", e)
+        logger.exception("Reversal error")
         return jsonify({
             "status": "error",
             "reversed_entries": reversed_count,
             "failed_entries": failed,
-            "message": str(e)
+            "message": "Reversal processing failed"
         }), 400
     
 # 2. Payout Summary View
@@ -1396,13 +1452,12 @@ def commissions_paid_summary():
         else:
             summary = []
 
-        # print("Payout summary:")
-        # pprint(summary)
 
         return jsonify(summary), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.exception("Error fetching payout summary")
+        return jsonify({"error": "Internal server error"}), 500
     
 #3. PROJECTION VIEW 
 @app.route("/api/commissions/projections/<int:commission_id>", methods=["GET"])
@@ -1414,16 +1469,13 @@ def commission_projection(commission_id):
         user_id = claims.get("sub")
         role = claims.get("role")
 
-        print(f'Role: {role}, User ID: {user_id} is requesting projection for commission ID: {commission_id}')
+        logger.info("Projection request for commission %d by user %s (%s)", commission_id, user_id, role)
 
 
         # --------------------------------------------------------------
         # Get projection data (access control is handled in the query)
         # --------------------------------------------------------------
         data = db.get_commission_projection(commission_id, user_id, role)
-        print(f"Projection request for commission ID {commission_id} by user {user_id} with role {role}")
-        print("Commission projection data:")
-        # pprint(data)
         if not data:
             # If no data is returned, treat as unauthorized for non-admin/finance
             if role not in ("admin", "finance"):
@@ -1431,62 +1483,69 @@ def commission_projection(commission_id):
         return jsonify(data), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.exception("Error fetching projection")
+        return jsonify({"error": "Internal server error"}), 500
 
 # 4. Analytics View - this is the data for the charts in the Analytics tab. It includes monthly summaries, outstanding commissions, pipeline, and salesperson performance.
 # TO DO: Build Frontend for this and add more analytics endpoints as needed.
+@app.route("/api/health")
+def health_check():
+    return jsonify({"status": "ok"}), 200
+
 @app.route("/api/commissions/analytics/monthly", methods=["GET"])
 @jwt_required()
 @role_required(['admin', 'finance'])
 def commission_monthly_summary():
     conn = db.get_connection()
-    data = get_commission_monthly_summary(conn)
-    conn.close()
-    return jsonify(data)
+    try:
+        data = get_commission_monthly_summary(conn)
+        return jsonify(data)
+    finally:
+        conn.close()
 
 @app.route("/api/commissions/analytics/outstanding", methods=["GET"])
 @jwt_required()
 @role_required(['admin', 'finance'])
 def commission_outstanding():
-
     conn = db.get_connection()
-    data = get_commission_outstanding(conn)
-    conn.close()
-
-    return jsonify(data)
+    try:
+        data = get_commission_outstanding(conn)
+        return jsonify(data)
+    finally:
+        conn.close()
 
 @app.route("/api/commissions/analytics/pipeline", methods=["GET"])
 @jwt_required()
 @role_required(['admin', 'finance'])
 def commission_pipeline():
-
     conn = db.get_connection()
-    data = get_commission_pipeline(conn)
-    conn.close()
-
-    return jsonify(data)
+    try:
+        data = get_commission_pipeline(conn)
+        return jsonify(data)
+    finally:
+        conn.close()
 
 @app.route("/api/commissions/analytics/sales", methods=["GET"])
 @jwt_required()
 @role_required(['admin', 'finance'])
 def commission_sales():
-
     conn = db.get_connection()
-    data = get_salesperson_commission_totals(conn)
-    conn.close()
-
-    return jsonify(data)
+    try:
+        data = get_salesperson_commission_totals(conn)
+        return jsonify(data)
+    finally:
+        conn.close()
 
 @app.route("/api/commissions/analytics/dashboard", methods=["GET"])
 @jwt_required()
 @role_required(['admin', 'finance'])
 def commission_dashboard():
-
     conn = db.get_connection()
-    data = get_commission_dashboard(conn)
-    conn.close()
-
-    return jsonify(data)
+    try:
+        data = get_commission_dashboard(conn)
+        return jsonify(data)
+    finally:
+        conn.close()
 
 # Preview Commission Approval View - this is the page that the manager sees when they click the link in the email to approve or reject a commission agreement. This is a GET route that renders an HTML page with the details of the commission and approve/reject buttons.
 @app.route("/preview/commission-approval")

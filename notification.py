@@ -3,6 +3,9 @@ from flask_mail import Mail, Message
 from db import DbUtil  # Your existing DB handler
 from dotenv import load_dotenv
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Load variables from .env
 load_dotenv()
@@ -62,9 +65,9 @@ def main():
 
     # Just log if empty, but don't stop
     if not expiring:
-        print("No expiring circuits found.")
+        logger.info("No expiring circuits found.")
     if not expired:
-        print("No expired circuits found.")
+        logger.info("No expired circuits found.")
 
     with app.app_context():
         body = format_circuit_email(expiring, expired)
@@ -74,7 +77,7 @@ def main():
             body=body
         )
         mail.send(msg)
-        print(f"Sent notification to {recipient_email}.")
+        logger.info("Sent notification to %s.", recipient_email)
 
 if __name__ == "__main__":
     main()

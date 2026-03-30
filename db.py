@@ -1,4 +1,6 @@
 import pymysql
+import logging
+from dbutils.pooled_db import PooledDB
 from datetime import date, datetime
 from flask import request
 from decimal import Decimal
@@ -8,18 +10,27 @@ from dateutil.relativedelta import relativedelta
 
 from utils import month_bounds, overlap_days
 
+logger = logging.getLogger(__name__)
+
 class DbUtil:
     def __init__(self, config):
-        self.config = config 
+        self.config = config
+        self._pool = PooledDB(
+            creator=pymysql,
+            maxconnections=10,
+            mincached=2,
+            maxcached=5,
+            blocking=True,
+            host=config['host'],
+            user=config['user'],
+            password=config['password'],
+            db=config['db'],
+            cursorclass=pymysql.cursors.Cursor,
+            autocommit=False,
+        )
 
     def get_connection(self):
-        return pymysql.connect(
-            host=self.config['host'],
-            user=self.config['user'],
-            password=self.config['password'],
-            db=self.config['db'],
-            cursorclass=pymysql.cursors.Cursor  # or DictCursor if you prefer
-        )
+        return self._pool.connection()
 
     # DB OPS WITH USERS
     # Save a new user
@@ -262,7 +273,7 @@ class DbUtil:
                 
                 row = c.fetchone()
                 if not row:
-                    print(f"No circuit found for ID: {circuit_id}")
+                    logger.warning("No circuit found for ID: %s", circuit_id)
                     return None
 
                 col_names = [desc[0] for desc in c.description]
@@ -271,6 +282,14 @@ class DbUtil:
             con.close()
     
     # Update an existing record in db
+    # Allowed columns for dynamic UPDATE on circuits table
+    CIRCUITS_UPDATABLE_COLUMNS = frozenset({
+        'vendor', 'circuitType', 'speed', 'circuitNumber', 'circuitOwner',
+        'usageFlag', 'enni', 'vlan', 'startDate', 'contractTerm',
+        'endDate', 'mrc', 'sellingPrice',
+        'siteA', 'siteB', 'comments', 'status', 'doc', 'salesPerson',
+    })
+
     # Edit a circuit
     def update_circuit(self, service_id, **kwargs):
         """
@@ -289,6 +308,11 @@ class DbUtil:
         int
             The number of rows affected (1 if the update was successful, 0 otherwise)
         """
+        # Reject any keys not in the whitelist
+        bad_keys = set(kwargs.keys()) - self.CIRCUITS_UPDATABLE_COLUMNS
+        if bad_keys:
+            raise ValueError(f"Invalid column names: {bad_keys}")
+
         con = self.get_connection()
         set_clause = ', '.join([f"{key} = %s" for key in kwargs.keys()])
         values = list(kwargs.values())
@@ -448,8 +472,8 @@ class DbUtil:
         - Commission agreement details
         GP and estimated commission value can be calculated in the frontend.
         """
+        conn = self.get_connection()
         try:
-            conn = self.get_connection()
             with conn.cursor(pymysql.cursors.DictCursor) as c:
                 c.execute("""
                     SELECT 
@@ -480,16 +504,17 @@ class DbUtil:
                 """)
                 results = c.fetchall()
 
-            conn.close()
             return results
 
         except Exception as e:
-            print("Error fetching commissions:", e)
+            logger.exception("Error fetching commissions")
             return []
+        finally:
+            conn.close()
 
     def create_commission(self, circuit_id, salesperson_id, commission_percentage=10.00, start_date=None, end_date=None, status='new', notes=None):
+        conn = self.get_connection()
         try:
-            conn = self.get_connection()
             with conn.cursor(pymysql.cursors.DictCursor) as c:
 
                 # 1️⃣ Validate circuit exists
@@ -499,7 +524,7 @@ class DbUtil:
                     WHERE id = %s
                 """, (circuit_id,))
                 if not c.fetchone():
-                    print(f"create_commission: circuit {circuit_id} not found")
+                    logger.warning("create_commission: circuit %s not found", circuit_id)
                     return False
 
                 # 2️⃣ Expire existing commissions (business rule)
@@ -535,16 +560,17 @@ class DbUtil:
                 ))
 
             conn.commit()
-            conn.close()
             return True
 
         except Exception as e:
-            print("Error creating commission:", e)
+            logger.exception("Error creating commission")
             return False
+        finally:
+            conn.close()
 
     def get_current_commission(self, circuit_id):
+        conn = self.get_connection()
         try:
-            conn = self.get_connection()
             with conn.cursor(pymysql.cursors.DictCursor) as c:
                 c.execute("""
                     SELECT *
@@ -554,11 +580,12 @@ class DbUtil:
                     LIMIT 1
                 """, (circuit_id,))
                 commission = c.fetchone()
-            conn.close()
             return commission
         except Exception as e:
-            print("Error fetching current commission:", e)
+            logger.exception("Error fetching current commission")
             return None
+        finally:
+            conn.close()
 
     def expire_active_commission(self, circuit_id, end_date, notes):
         """
@@ -567,8 +594,8 @@ class DbUtil:
         - Notes can describe the reason (e.g., salesperson change/removal)
         - Does nothing if no active commission exists.
         """
+        conn = self.get_connection()
         try:
-            conn = self.get_connection()
             with conn.cursor(pymysql.cursors.DictCursor) as c:
 
                 c.execute("""
@@ -586,16 +613,17 @@ class DbUtil:
                 ))
 
             conn.commit()
-            conn.close()
             return True
 
         except Exception as e:
-            print("Error expiring commission:", e)
+            logger.exception("Error expiring commission")
             return False
+        finally:
+            conn.close()
     
     def update_commission_status(self, commission_id, status, payout_hold=None):
+        conn = self.get_connection()
         try:
-            conn = self.get_connection()
             with conn.cursor() as c:
 
                 if payout_hold is None:
@@ -615,12 +643,13 @@ class DbUtil:
                     """, (status, payout_hold, commission_id))
 
             conn.commit()
-            conn.close()
             return True
 
         except Exception as e:
-            print("Error updating commission status:", e)
+            logger.exception("Error updating commission status")
             return False
+        finally:
+            conn.close()
 
     def get_commission_by_id(self, commission_id):
         """
@@ -630,8 +659,8 @@ class DbUtil:
         - Client site info
         - Latest approval token expiry
         """
+        conn = self.get_connection()
         try:
-            conn = self.get_connection()
             with conn.cursor(pymysql.cursors.DictCursor) as cursor:
                 cursor.execute("""
                     SELECT 
@@ -671,20 +700,20 @@ class DbUtil:
 
                 commission = cursor.fetchone()
 
-            conn.close()
-
             if not commission:
                 return None
 
             return commission
 
         except Exception as e:
-            print("Error fetching commission:", e)
+            logger.exception("Error fetching commission")
             return None
+        finally:
+            conn.close()
         
     def update_commission_on_apply(self, commission_id, percentage, status):
+        conn = self.get_connection()
         try:
-            conn = self.get_connection()
             with conn.cursor() as c:
                 c.execute("""
                     UPDATE commissions
@@ -694,15 +723,16 @@ class DbUtil:
                     WHERE id = %s
                 """, (percentage, status, commission_id))
             conn.commit()
-            conn.close()
             return True
         except Exception as e:
-            print("Error updating commission on apply:", e)
+            logger.exception("Error updating commission on apply")
             return False
+        finally:
+            conn.close()
         
     def reset_commission(self, commission_id):
+        conn = self.get_connection()
         try:
-            conn = self.get_connection()
             with conn.cursor() as c:
                 c.execute("""
                     UPDATE commissions
@@ -715,10 +745,11 @@ class DbUtil:
                     AND status = 'pending'
                 """, (commission_id,))
             conn.commit()
-            conn.close()
         except Exception as e:
-            print(f"Error resetting commission {commission_id}:", e)
+            logger.exception("Error resetting commission %s", commission_id)
             raise
+        finally:
+            conn.close()
 
     
     def reset_expired_pending_commissions(self):
@@ -726,8 +757,8 @@ class DbUtil:
         Reset commissions stuck in 'pending' where the approval token expired
         without approval or rejection.
         """
+        conn = self.get_connection()
         try:
-            conn = self.get_connection()
             with conn.cursor(pymysql.cursors.DictCursor) as c:
 
                 # 1️⃣ Find pending commissions with expired, unused tokens
@@ -743,7 +774,6 @@ class DbUtil:
                 rows = c.fetchall()
 
                 if not rows:
-                    conn.close()
                     return 0
 
                 commission_ids = [row["commission_id"] for row in rows]
@@ -765,16 +795,17 @@ class DbUtil:
                 """, commission_ids)
 
             conn.commit()
-            conn.close()
             return len(commission_ids)
 
         except Exception as e:
-            print("Error resetting expired pending commissions:", e)
+            logger.exception("Error resetting expired pending commissions")
             return 0
+        finally:
+            conn.close()
         
     def get_commissions_for_salesperson(self, salesperson_id):
+        conn = self.get_connection()
         try:
-            conn = self.get_connection()
             with conn.cursor(pymysql.cursors.DictCursor) as c:
                 c.execute("""
                     SELECT DISTINCT
@@ -811,12 +842,13 @@ class DbUtil:
 
                 rows = c.fetchall()
 
-            conn.close()
             return rows
 
         except Exception as e:
-            print("Error fetching salesperson commissions:", e)
+            logger.exception("Error fetching salesperson commissions")
             return []
+        finally:
+            conn.close()
 
 
 
@@ -826,39 +858,45 @@ class DbUtil:
 
     def create_commission_approval_token(self, commission_id, token, expires_at):
         conn = self.get_connection()
-        with conn.cursor() as c:
-            c.execute("""
-                INSERT INTO commission_approval_tokens
-                    (commission_id, token, expires_at)
-                VALUES (%s, %s, %s)
-            """, (commission_id, token, expires_at))
-        conn.commit()
-        conn.close()
+        try:
+            with conn.cursor() as c:
+                c.execute("""
+                    INSERT INTO commission_approval_tokens
+                        (commission_id, token, expires_at)
+                    VALUES (%s, %s, %s)
+                """, (commission_id, token, expires_at))
+            conn.commit()
+        finally:
+            conn.close()
 
     def get_valid_approval_token(self, token):
         conn = self.get_connection()
-        with conn.cursor(pymysql.cursors.DictCursor) as c:
-            c.execute("""
-                SELECT *
-                FROM commission_approval_tokens
-                WHERE token = %s
-                AND used_at IS NULL
-                AND expires_at > NOW()
-            """, (token,))
-            row = c.fetchone()
-        conn.close()
-        return row
+        try:
+            with conn.cursor(pymysql.cursors.DictCursor) as c:
+                c.execute("""
+                    SELECT *
+                    FROM commission_approval_tokens
+                    WHERE token = %s
+                    AND used_at IS NULL
+                    AND expires_at > NOW()
+                """, (token,))
+                row = c.fetchone()
+            return row
+        finally:
+            conn.close()
     
     def mark_approval_token_used(self, token):
         conn = self.get_connection()
-        with conn.cursor() as c:
-            c.execute("""
-                UPDATE commission_approval_tokens
-                SET used_at = NOW()
-                WHERE token = %s
-            """, (token,))
-        conn.commit()
-        conn.close()
+        try:
+            with conn.cursor() as c:
+                c.execute("""
+                    UPDATE commission_approval_tokens
+                    SET used_at = NOW()
+                    WHERE token = %s
+                """, (token,))
+            conn.commit()
+        finally:
+            conn.close()
 
 #=============================================================================================================================================
 # COMMISSION LEDGER ENTRIES
@@ -866,8 +904,8 @@ class DbUtil:
     
     # This function is called in batch_commissions.py to create monthly commission ledger entries
     def create_monthly_commission_ledger_entry(self, commission_id: int, year: int, month: int) -> bool:
+        conn = self.get_connection()
         try:
-            conn = self.get_connection()
             with conn.cursor(pymysql.cursors.DictCursor) as c:
 
                 # Month bounds
@@ -968,7 +1006,6 @@ class DbUtil:
                 ))
 
             conn.commit()
-            conn.close()
             return True
         
         except pymysql.err.IntegrityError as e:
@@ -976,8 +1013,10 @@ class DbUtil:
             return True
 
         except Exception as e:
-            print("Commission accrual error:", e)
+            logger.exception("Commission accrual error")
             return False
+        finally:
+            conn.close()
         
     # Called in /api/commissions/earnings_summary
     def get_commissions_earnings_summary(self, user_id=None):
@@ -985,8 +1024,8 @@ class DbUtil:
         Query the commission_ledger table and return earnings summary.
         If user_id is provided, filter by that user.
         """
+        conn = self.get_connection()
         try:
-            conn = self.get_connection()
             with conn.cursor(pymysql.cursors.DictCursor) as c:
                 if user_id:
                     sql = """
@@ -1148,6 +1187,8 @@ class DbUtil:
 
         except Exception as e:
             raise RuntimeError(f"Database error: {e}")
+        finally:
+            conn.close()
 
 
     # Called in /api/commissions/earnings_summary/pay - these are manual payments triggered by admin or finance users, not the automated batch payout  
@@ -1156,8 +1197,8 @@ class DbUtil:
         Create a payment ledger entry for an earned commission.
         Allows repayment if the previous payment was reversed.
         """
+        conn = self.get_connection()
         try:
-            conn = self.get_connection()
             with conn.cursor(pymysql.cursors.DictCursor) as c:
 
                 # Fetch the earned commission entry
@@ -1190,7 +1231,7 @@ class DbUtil:
                 if c.fetchone():
                     raise ValueError("Commission already paid and not reversed")
                 else:
-                    print(f"Creating payment for ledger {earned_ledger_id} (repayment after reversal allowed)")
+                    logger.info("Creating payment for ledger %s (repayment after reversal allowed)", earned_ledger_id)
 
                 # Insert the new payment ledger entry
                 c.execute("""
@@ -1229,19 +1270,20 @@ class DbUtil:
                 ))
 
             conn.commit()
-            conn.close()
             return True
 
         except Exception as e:
-            print("Payment entry error:", e)
+            logger.exception("Payment entry error")
             return False
+        finally:
+            conn.close()
         
     def create_commission_reversal_entry(self, earned_ledger_id: int, reversal_date: date, notes: str = None) -> bool:
         """
         Insert a new ledger entry that reverses a paid commission.
         """
+        conn = self.get_connection()
         try:
-            conn = self.get_connection()
             with conn.cursor(pymysql.cursors.DictCursor) as c:
 
                 # Fetch the payment ledger row linked to this earned entry
@@ -1308,66 +1350,70 @@ class DbUtil:
                 ))
 
             conn.commit()
-            conn.close()
             return True
 
         except Exception as e:
-            print("Reversal entry error:", e)
+            logger.exception("Reversal entry error")
             return False
+        finally:
+            conn.close()
         
     #=============================================================================================================================================
     # BATCH AUTO PAYOUT SUPPORTING FUNCTIONS
     #============================================================================================================================================= 
     def get_unpaid_earned_commissions(self, year, month):
         conn = self.get_connection()
-        with conn.cursor(pymysql.cursors.DictCursor) as c:
-            c.execute("""
-                SELECT
-                    e.id,
-                    e.commission_id,
-                    e.user_id,
-                    e.commission_value,
-                    e.active_days,
-                    e.period_end,
+        try:
+            with conn.cursor(pymysql.cursors.DictCursor) as c:
+                c.execute("""
+                    SELECT
+                        e.id,
+                        e.commission_id,
+                        e.user_id,
+                        e.commission_value,
+                        e.active_days,
+                        e.period_end,
 
-                    u.name AS user_name,
-                    u.surname AS user_surname,
+                        u.name AS user_name,
+                        u.surname AS user_surname,
 
-                    cir.circuitNumber AS circuit_number,
-                    s.site AS client_name
+                        cir.circuitNumber AS circuit_number,
+                        s.site AS client_name
 
-                FROM commission_ledger e
+                    FROM commission_ledger e
 
-                LEFT JOIN commission_ledger p
-                    ON p.reference_ledger_id = e.id
-                    AND p.entry_type = 'payment'
+                    LEFT JOIN commission_ledger p
+                        ON p.reference_ledger_id = e.id
+                        AND p.entry_type = 'payment'
 
-                JOIN commissions c
-                    ON e.commission_id = c.id
+                    JOIN commissions c
+                        ON e.commission_id = c.id
 
-                JOIN circuits cir
-                    ON c.circuit_id = cir.id
+                    JOIN circuits cir
+                        ON c.circuit_id = cir.id
 
-                LEFT JOIN sites s
-                    ON cir.siteB = s.id
+                    LEFT JOIN sites s
+                        ON cir.siteB = s.id
 
-                LEFT JOIN users u
-                    ON e.user_id = u.id
+                    LEFT JOIN users u
+                        ON e.user_id = u.id
 
-                WHERE e.entry_type = 'earned'
-                AND YEAR(e.period_end) = %s
-                AND MONTH(e.period_end) = %s
-                AND p.id IS NULL
+                    WHERE e.entry_type = 'earned'
+                    AND YEAR(e.period_end) = %s
+                    AND MONTH(e.period_end) = %s
+                    AND p.id IS NULL
 
-                AND (
-                    (c.status = 'active' AND c.payout_hold = 0)
-                    OR e.last_earned = 1
-                )
+                    AND (
+                        (c.status = 'active' AND c.payout_hold = 0)
+                        OR e.last_earned = 1
+                    )
 
-                ORDER BY u.surname, cir.circuitNumber
-            """, (year, month))
+                    ORDER BY u.surname, cir.circuitNumber
+                """, (year, month))
 
-        return c.fetchall()
+                return c.fetchall()
+        finally:
+            conn.close()
         
     # This is used in batch_commissions_payout.py to generate the payment entries automatically. This is the opposite of the single, manual payout function above.
     def create_commission_payment_entry_batch(self, earned_ledger_id: int, payment_date: date, payout_batch_id: str, notes: str = None):
@@ -1448,7 +1494,7 @@ class DbUtil:
             return True
 
         except Exception as e:
-            print("Batch payment error:", e)
+            logger.exception("Batch payment error")
             return False
 
         finally:
@@ -1463,8 +1509,8 @@ class DbUtil:
         Return all PAID commission ledger entries, including effective_status.
         If user_id is provided, filter by that user.
         """
+        conn = self.get_connection()
         try:
-            conn = self.get_connection()
             with conn.cursor(pymysql.cursors.DictCursor) as c:
 
                 user_filter = "AND cl.user_id = %s" if user_id else ""
@@ -1558,147 +1604,151 @@ class DbUtil:
 
         except Exception as e:
             raise RuntimeError(f"Database error: {e}")
+        finally:
+            conn.close()
         
     #=============================================================================================================================================
 
     def get_commission_projection(self, commission_id, user_id, role):
         conn = self.get_connection()
-        with conn.cursor(pymysql.cursors.DictCursor) as c:
+        try:
+            with conn.cursor(pymysql.cursors.DictCursor) as c:
 
-            # ------------------------------------------------------------------
-            # 1. Get commission agreement
-            # ------------------------------------------------------------------
-            c.execute("""
-                SELECT 
-                    c.id AS commission_id,
-                    c.start_date AS commission_start_date,
-                    cir.startDate AS circuit_start_date,
-                    cir.contractTerm AS contract_term,
-                    cir.sellingPrice AS selling_price,
-                    cir.mrc AS mrc,
-                    c.commission_percentage AS commission_percentage,
-                    c.salesperson_id
-                FROM commissions c
-                JOIN circuits cir ON c.circuit_id = cir.id
-                WHERE c.id = %s
-                AND (
-                    %s IN ('admin', 'finance')
-                    OR c.salesperson_id = %s
-                    OR EXISTS (
-                        SELECT 1
-                        FROM commission_ledger cl
-                        WHERE cl.commission_id = c.id
-                        AND cl.user_id = %s
-                    )
-                );
-            """, (commission_id, role, user_id, user_id))
-            agreement = c.fetchone()
-            if not agreement:
-                return []
+                # ------------------------------------------------------------------
+                # 1. Get commission agreement
+                # ------------------------------------------------------------------
+                c.execute("""
+                    SELECT 
+                        c.id AS commission_id,
+                        c.start_date AS commission_start_date,
+                        cir.startDate AS circuit_start_date,
+                        cir.contractTerm AS contract_term,
+                        cir.sellingPrice AS selling_price,
+                        cir.mrc AS mrc,
+                        c.commission_percentage AS commission_percentage,
+                        c.salesperson_id
+                    FROM commissions c
+                    JOIN circuits cir ON c.circuit_id = cir.id
+                    WHERE c.id = %s
+                    AND (
+                        %s IN ('admin', 'finance')
+                        OR c.salesperson_id = %s
+                        OR EXISTS (
+                            SELECT 1
+                            FROM commission_ledger cl
+                            WHERE cl.commission_id = c.id
+                            AND cl.user_id = %s
+                        )
+                    );
+                """, (commission_id, role, user_id, user_id))
+                agreement = c.fetchone()
+                if not agreement:
+                    return []
 
-            # ------------------------------------------------------------------
-            # 2. Get earned ledger entries
-            # ------------------------------------------------------------------
-            c.execute("""
-                SELECT id, period_start, period_end, commission_value, active_days, days_in_month
-                FROM commission_ledger
-                WHERE commission_id = %s
-                AND entry_type = 'earned'
-            """, (commission_id,))
-            earned_entries = c.fetchall()
-            earned_map = {e["period_start"]: e for e in earned_entries}
+                # ------------------------------------------------------------------
+                # 2. Get earned ledger entries
+                # ------------------------------------------------------------------
+                c.execute("""
+                    SELECT id, period_start, period_end, commission_value, active_days, days_in_month
+                    FROM commission_ledger
+                    WHERE commission_id = %s
+                    AND entry_type = 'earned'
+                """, (commission_id,))
+                earned_entries = c.fetchall()
+                earned_map = {e["period_start"]: e for e in earned_entries}
 
-            # ------------------------------------------------------------------
-            # 3. Get payments mapped to earned periods
-            # ------------------------------------------------------------------
-            c.execute("""
-                SELECT 
-                    p.reference_ledger_id,
-                    e.period_start,
-                    p.commission_value
-                FROM commission_ledger p
-                JOIN commission_ledger e 
-                    ON e.id = p.reference_ledger_id
-                WHERE p.commission_id = %s
-                AND p.entry_type = 'payment'
-                AND p.status = 'paid'
-            """, (commission_id,))
-            from collections import defaultdict
-            payment_rows = c.fetchall()
-            payments_map = defaultdict(float)
-            for row in payment_rows:
-                payments_map[row["period_start"]] += float(row["commission_value"] or 0)
+                # ------------------------------------------------------------------
+                # 3. Get payments mapped to earned periods
+                # ------------------------------------------------------------------
+                c.execute("""
+                    SELECT 
+                        p.reference_ledger_id,
+                        e.period_start,
+                        p.commission_value
+                    FROM commission_ledger p
+                    JOIN commission_ledger e 
+                        ON e.id = p.reference_ledger_id
+                    WHERE p.commission_id = %s
+                    AND p.entry_type = 'payment'
+                    AND p.status = 'paid'
+                """, (commission_id,))
+                from collections import defaultdict
+                payment_rows = c.fetchall()
+                payments_map = defaultdict(float)
+                for row in payment_rows:
+                    payments_map[row["period_start"]] += float(row["commission_value"] or 0)
 
-            # ------------------------------------------------------------------
-            # 4. Setup calculation variables
-            # ------------------------------------------------------------------
-            from datetime import timedelta
-            from dateutil.relativedelta import relativedelta
-            from calendar import monthrange
+                # ------------------------------------------------------------------
+                # 4. Setup calculation variables
+                # ------------------------------------------------------------------
+                from datetime import timedelta
+                from dateutil.relativedelta import relativedelta
+                from calendar import monthrange
 
-            contract_start = agreement["commission_start_date"]
-            term = int(agreement["contract_term"] or 0)
-            gp = float(agreement["selling_price"] or 0) - float(agreement["mrc"] or 0)
-            pct = float(agreement["commission_percentage"] or 0) / 100
+                contract_start = agreement["commission_start_date"]
+                term = int(agreement["contract_term"] or 0)
+                gp = float(agreement["selling_price"] or 0) - float(agreement["mrc"] or 0)
+                pct = float(agreement["commission_percentage"] or 0) / 100
 
-            contract_end = contract_start + relativedelta(months=term) - timedelta(days=1)
+                contract_end = contract_start + relativedelta(months=term) - timedelta(days=1)
 
-            def month_bounds(dt):
-                start = dt.replace(day=1)
-                next_month = start + relativedelta(months=1)
-                end = next_month - timedelta(days=1)
-                return start, end
+                def month_bounds(dt):
+                    start = dt.replace(day=1)
+                    next_month = start + relativedelta(months=1)
+                    end = next_month - timedelta(days=1)
+                    return start, end
 
-            def get_active_days(period_start, period_end):
-                actual_start = max(period_start, contract_start)
-                actual_end = min(period_end, contract_end)
-                if actual_start > actual_end:
-                    return 0
-                return (actual_end - actual_start).days + 1
+                def get_active_days(period_start, period_end):
+                    actual_start = max(period_start, contract_start)
+                    actual_end = min(period_end, contract_end)
+                    if actual_start > actual_end:
+                        return 0
+                    return (actual_end - actual_start).days + 1
 
-            # ------------------------------------------------------------------
-            # 5. Build timeline (earned + projected)
-            # ------------------------------------------------------------------
-            timeline = []
-            current = contract_start.replace(day=1)
+                # ------------------------------------------------------------------
+                # 5. Build timeline (earned + projected)
+                # ------------------------------------------------------------------
+                timeline = []
+                current = contract_start.replace(day=1)
 
-            while current <= contract_end:
-                period_start, period_end = month_bounds(current)
+                while current <= contract_end:
+                    period_start, period_end = month_bounds(current)
 
-                # Adjust last month if period_end goes past contract_end
-                if period_end > contract_end:
-                    period_end = contract_end
+                    # Adjust last month if period_end goes past contract_end
+                    if period_end > contract_end:
+                        period_end = contract_end
 
-                # Use ledger if exists
-                if period_start in earned_map:
-                    e = earned_map[period_start]
-                    earned_value = float(e["commission_value"] or 0)
-                    active_days = int(e["active_days"] or 0)
-                    days_in_month = int(e["days_in_month"] or 0)
-                    entry_type = "earned"
-                else:
-                    days_in_month = monthrange(period_start.year, period_start.month)[1]
-                    active_days = get_active_days(period_start, period_end)
-                    earned_value = (gp * pct) * (active_days / days_in_month)
-                    entry_type = "projected"
+                    # Use ledger if exists
+                    if period_start in earned_map:
+                        e = earned_map[period_start]
+                        earned_value = float(e["commission_value"] or 0)
+                        active_days = int(e["active_days"] or 0)
+                        days_in_month = int(e["days_in_month"] or 0)
+                        entry_type = "earned"
+                    else:
+                        days_in_month = monthrange(period_start.year, period_start.month)[1]
+                        active_days = get_active_days(period_start, period_end)
+                        earned_value = (gp * pct) * (active_days / days_in_month)
+                        entry_type = "projected"
 
-                paid_value = payments_map.get(period_start, 0.0)
+                    paid_value = payments_map.get(period_start, 0.0)
 
-                timeline.append({
-                    "period_start": period_start,
-                    "period_end": period_end,
-                    "earned": round(earned_value, 2),
-                    "paid": round(paid_value, 2),
-                    "remaining": round(max(earned_value - paid_value, 0), 2),
-                    "type": entry_type,
-                    "active_days": active_days,
-                    "days_in_month": days_in_month
-                })
+                    timeline.append({
+                        "period_start": period_start,
+                        "period_end": period_end,
+                        "earned": round(earned_value, 2),
+                        "paid": round(paid_value, 2),
+                        "remaining": round(max(earned_value - paid_value, 0), 2),
+                        "type": entry_type,
+                        "active_days": active_days,
+                        "days_in_month": days_in_month
+                    })
 
-                current += relativedelta(months=1)
+                    current += relativedelta(months=1)
 
-            return timeline
-            
+                return timeline
+        finally:
+            conn.close()
 
 
     #=============================================================================================================================================
@@ -1708,14 +1758,17 @@ class DbUtil:
     # Automated payout kill switch lookup
     def get_system_setting_bool(self, key: str) -> bool:
         conn = self.get_connection()
-        with conn.cursor() as c:
-            c.execute("SELECT setting_value FROM system_settings WHERE setting_key = %s", (key,))
-            row = c.fetchone()
+        try:
+            with conn.cursor() as c:
+                c.execute("SELECT setting_value FROM system_settings WHERE setting_key = %s", (key,))
+                row = c.fetchone()
 
-        if not row:
-            return False  # Fail closed
+            if not row:
+                return False  # Fail closed
 
-        return row[0].lower() in ("1", "true", "yes", "on")
+            return row[0].lower() in ("1", "true", "yes", "on")
+        finally:
+            conn.close()
 
     def get_system_setting(self, key: str):
         conn = self.get_connection()

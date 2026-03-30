@@ -4,7 +4,6 @@
 
 from datetime import date
 import os
-import pprint
 import sys
 import logging
 from dotenv import load_dotenv
@@ -14,8 +13,6 @@ from decimal import Decimal
 from uuid import uuid4
 import csv
 import io
-
-from pprint import pprint
 
 from app import mail, app
 
@@ -235,7 +232,7 @@ def send_commission_payout_email(summary, year, month, payout_batch_id):
                 e.get("circuit_number"),
                 e.get("client_name"),
                 e.get("active_days"),
-                float(e["commission_value"])
+                str(Decimal(e["commission_value"]))
             ])
 
     csv_data = output.getvalue()

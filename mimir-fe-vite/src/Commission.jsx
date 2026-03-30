@@ -7,6 +7,7 @@ import React, { useEffect, useState, useRef, useMemo, useCallback } from "react"
 import { jwtDecode } from "jwt-decode";
 import axios from "./AxiosInstance";
 import { Loader2 } from "lucide-react";
+import toast from 'react-hot-toast';
 
 // Sub-components
 import AgreementsTable from "./components/AgreementsTable";
@@ -282,8 +283,6 @@ const Commissions = () => {
           `/api/commissions/projections/${selectedProjectionCommissionId}`
         );
 
-        console.log("Projection API:", res.data);
-
         setProjectionData(res.data || []);
       } catch (err) {
         console.error("Projection fetch error:", err);
@@ -458,11 +457,11 @@ const Commissions = () => {
         }
       );
 
-      alert("Commission submitted for approval");
+      toast.success("Commission submitted for approval");
       await fetchCommissions();
     } catch (err) {
       console.error("Error submitting commission:", err.response?.data || err);
-      alert("Failed to submit commission");
+      toast.error("Failed to submit commission");
     } finally {
       setApplyButtonLoading(false);
     }
@@ -485,14 +484,14 @@ const Commissions = () => {
         }
       );
 
-      alert("Commission agreement has been paused.");
+      toast.success("Commission agreement has been paused.");
       await fetchCommissions();
     } catch (err) {
       console.error(
         "Error pausing commission agreement:",
         err.response?.data || err
       );
-      alert("Failed to pause the commission agreement.");
+      toast.error("Failed to pause the commission agreement.");
     } finally {
       setPauseButtonLoading(false);
     }
@@ -515,14 +514,14 @@ const Commissions = () => {
         }
       );
 
-      alert("Commission agreement has been resumed.");
+      toast.success("Commission agreement has been resumed.");
       await fetchCommissions();
     } catch (err) {
       console.error(
         "Error resuming commission agreement:",
         err.response?.data || err
       );
-      alert("Failed to resume the commission agreement.");
+      toast.error("Failed to resume the commission agreement.");
     } finally {
       setResumeButtonLoading(false);
     }
@@ -551,14 +550,14 @@ const Commissions = () => {
         }
       );
 
-      alert("Commission agreement has been canceled.");
+      toast.success("Commission agreement has been canceled.");
       await fetchCommissions();
     } catch (err) {
       console.error(
         "Error canceling commission agreement:",
         err.response?.data || err
       );
-      alert("Failed to cancel the commission agreement.");
+      toast.error("Failed to cancel the commission agreement.");
     }
   };
 
@@ -608,7 +607,7 @@ const Commissions = () => {
 
       // Success
       if (res.status === 200 && res.data.status === "success") {
-        alert(
+        toast.success(
           `${
             action === "pay" ? "Commission paid" : "Ledger entry reversed"
           } successfully`
@@ -616,7 +615,7 @@ const Commissions = () => {
       }
       // Partial success
       else if (res.status === 207 || res.data.status === "partial") {
-        alert(
+        toast(
           `Partial ${action === "pay" ? "payout" : "reversal"}: ${
             action === "pay" ? "Paid" : "Reversed"
           } ${res.data.paid_entries || res.data.reversed_entries}. Failed: ${
@@ -626,7 +625,7 @@ const Commissions = () => {
       }
       // Failure
       else {
-        alert(
+        toast.error(
           `Failed to ${action} ledger entry: ` +
             (res.data.message || "Unknown error")
         );
@@ -637,9 +636,9 @@ const Commissions = () => {
       console.error(`${action} failed:`, err.response?.data || err);
 
       if (err.response?.data?.message) {
-        alert(`Failed to ${action} ledger entry: ` + err.response.data.message);
+        toast.error(`Failed to ${action} ledger entry: ` + err.response.data.message);
       } else {
-        alert(`Failed to ${action} ledger entry: Server error`);
+        toast.error(`Failed to ${action} ledger entry: Server error`);
       }
     }
   };
@@ -789,11 +788,7 @@ const Commissions = () => {
   // ============================================================================
   
   // Debug logging for troubleshooting projection dropdown issues
-    useEffect(() => {
-      console.log("[DEBUG] commissions:", commissions);
-      console.log("[DEBUG] userIdentifier:", userIdentifier);
-      console.log("[DEBUG] projectionAgreements:", projectionAgreements);
-    }, [commissions, userIdentifier, projectionAgreements]);
+    // (removed for production)
 
   // const projectionContractTerm = Number(selectedProjectionAgreement?.contractTerm) || 0;
   // const projectionSellingPrice = Number(selectedProjectionAgreement?.sellingPrice) || 0;
