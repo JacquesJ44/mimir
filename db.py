@@ -1660,22 +1660,26 @@ class DbUtil:
                 # ------------------------------------------------------------------
                 # 3. Get payments mapped to earned periods
                 # ------------------------------------------------------------------
+                # Get all payment and reversal entries mapped to earned periods
                 c.execute("""
                     SELECT 
-                        p.reference_ledger_id,
                         e.period_start,
-                        p.commission_value
-                    FROM commission_ledger p
+                        cl.entry_type,
+                        cl.status,
+                        cl.commission_value
+                    FROM commission_ledger cl
                     JOIN commission_ledger e 
-                        ON e.id = p.reference_ledger_id
-                    WHERE p.commission_id = %s
-                    AND p.entry_type = 'payment'
-                    AND p.status = 'paid'
+                        ON e.id = cl.reference_ledger_id
+                    WHERE cl.commission_id = %s
+                    AND (
+                        (cl.entry_type = 'payment' AND cl.status = 'paid') OR
+                        (cl.entry_type = 'adjustment' AND cl.status = 'reversed')
+                    )
                 """, (commission_id,))
                 from collections import defaultdict
-                payment_rows = c.fetchall()
                 payments_map = defaultdict(float)
-                for row in payment_rows:
+                for row in c.fetchall():
+                    # Payments are positive, reversals are negative (commission_value is already negative for reversals)
                     payments_map[row["period_start"]] += float(row["commission_value"] or 0)
 
                 # ------------------------------------------------------------------
