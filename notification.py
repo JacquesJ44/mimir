@@ -21,7 +21,7 @@ app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_USERNAME')
 
-recipient_email = os.getenv('RECIPIENT_EMAIL')
+support_email = os.getenv('SUPPORT_EMAIL')
 
 
 mail = Mail(app)
@@ -73,11 +73,11 @@ def main():
         body = format_circuit_email(expiring, expired)
         msg = Message(
             subject="Mimir: Circuits Expiring Soon",
-            recipients=[recipient_email],
+            recipients=[support_email],
             body=body
         )
         mail.send(msg)
-        logger.info("Sent notification to %s.", recipient_email)
+        logger.info("Sent notification to %s.", support_email)
 
 if __name__ == "__main__":
     main()

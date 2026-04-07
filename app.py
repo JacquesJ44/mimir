@@ -41,7 +41,7 @@ _REQUIRED_ENV = [
     'DB_HOST', 'DB_USER', 'DB_NAME',
     'SECRET_KEY', 'JWT_SECRET_KEY',
     'MAIL_SERVER', 'MAIL_PORT', 'MAIL_USERNAME', 'MAIL_PASSWORD',
-    'RECIPIENT_EMAIL', 'APP_BASE_URL',
+    'MANAGER_EMAIL', 'SUPPORT_EMAIL', 'FINANCE_EMAIL', 'APP_BASE_URL',
 ]
 _missing = [v for v in _REQUIRED_ENV if not os.getenv(v)]
 # DB_PASSWORD must be present (could be empty string), not None
@@ -114,7 +114,9 @@ app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS') == 'True'
 app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_USERNAME')
-app.config['RECIPIENT_EMAIL'] = os.getenv('RECIPIENT_EMAIL')
+app.config['MANAGER_EMAIL'] = os.getenv('MANAGER_EMAIL')
+app.config['SUPPORT_EMAIL'] = os.getenv('SUPPORT_EMAIL')
+app.config['FINANCE_EMAIL'] = os.getenv('FINANCE_EMAIL')
 # app.config["MAIL_SUPPRESS_SEND"] = True
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
@@ -1032,7 +1034,7 @@ def apply_commission():
         msg = Message(
             subject=f"Commission Approval Request - ID {commission_id}",
             sender=os.getenv("MAIL_DEFAULT_SENDER"),
-            recipients=[email.strip() for email in os.getenv("RECIPIENT_EMAIL").split(",")],
+            recipients=[email.strip() for email in os.getenv("MANAGER_EMAIL").split(",")],
             html=render_template(
                 "commission_approval.html",
                 salesperson_name=commission["salesperson_name"],
