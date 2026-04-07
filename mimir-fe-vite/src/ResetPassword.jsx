@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from './AxiosInstance'
+import toast from 'react-hot-toast';
 
 export default function ResetPassword() {
   const { token } = useParams();
@@ -12,10 +13,10 @@ export default function ResetPassword() {
     e.preventDefault();
     try {
     await axios.post(`/api/reset-password/${token}`, { new_password: newPassword });
-    alert("Password reset successful.");
+    toast.success("Password reset successful.");
     navigate("/login");
   } catch (error) {
-    alert("There was a problem resetting your password. The link may have expired.");
+    toast.error("There was a problem resetting your password. The link may have expired.");
     console.error(error);
     navigate("/login");
   }

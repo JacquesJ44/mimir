@@ -1,6 +1,7 @@
 import axios from "./AxiosInstance.js";
 import { useState, useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
+import toast from 'react-hot-toast';
 
 const ViewCircuit = () => {
   const { id } = useParams();
@@ -38,7 +39,7 @@ const ViewCircuit = () => {
       window.open(fileURL, "_blank");
     } catch (err) {
       console.error("Error opening PDF:", err);
-      alert("Failed to open PDF.");
+      toast.error("Failed to open PDF.");
     }
   };
 

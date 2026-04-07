@@ -1,6 +1,7 @@
 import axios from "./AxiosInstance.js";
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import toast from 'react-hot-toast';
 import { addMonths, subDays, parseISO, format, isValid,set } from 'date-fns';
 
 const UpdateCircuit = () => {
@@ -168,7 +169,7 @@ const UpdateCircuit = () => {
                 );
 
                 if (res.status === 204) {
-                alert("No changes made to the circuit.");
+                toast("No changes made to the circuit.");
                 navigate("/circuits");
                 return;
                 }
@@ -189,7 +190,7 @@ const UpdateCircuit = () => {
                     });
                 } catch (uploadErr) {
                     console.error("Upload failed:", uploadErr);
-                    alert("Circuit updated, but file upload failed.");
+                    toast.error("Circuit updated, but file upload failed.");
                 }
                 }
 
@@ -202,7 +203,7 @@ const UpdateCircuit = () => {
 
                 const errorMsg =
                 err.response?.data?.error || "Failed to update circuit.";
-                alert(errorMsg);
+                toast.error(errorMsg);
             }
             };
 
@@ -462,7 +463,7 @@ const UpdateCircuit = () => {
                                 </p>
 
                                 <h3 className="text-md font-semibold mb-2 mt-5 text-gray-700 dark:text-gray-100">📝 Notes</h3>
-                                        <textarea className="textarea textarea-bordered w-full min-h-[200px]" placeholder="e.g., Make dat money yo" />
+                                        <textarea className="textarea textarea-bordered w-full min-h-52" placeholder="e.g., Make dat money yo" />
                             </div>
                             
                             {/* Calculator (Col 4, Row-span 3) */}

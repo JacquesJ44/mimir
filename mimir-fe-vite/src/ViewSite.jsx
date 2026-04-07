@@ -1,6 +1,7 @@
 import axios from "./AxiosInstance.js";
 import { useState, useEffect } from "react";
 import { Link, useParams, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
 const ViewSite = () => {
 
@@ -30,14 +31,14 @@ const ViewSite = () => {
         try {
           const response = await axios.delete(`/api/sites/viewsite/${site}`);
           if (response.data.msg === "Deleted!") {
-            alert("Site deleted successfully.");
+            toast.success("Site deleted successfully.");
             navigate("/sites");
           } else {
-            alert("Error: " + JSON.stringify(response.data));
+            toast.error("Error: " + JSON.stringify(response.data));
           }
         } catch (error) {
           console.error("Delete failed:", error);
-          alert("Failed to delete the site.");
+          toast.error("Failed to delete the site.");
         }
       };
 

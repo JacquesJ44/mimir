@@ -1,6 +1,7 @@
 import axios from "./AxiosInstance.js";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import toast from 'react-hot-toast';
 
 const Register = () => {
 
@@ -27,7 +28,7 @@ const Register = () => {
         navigate('/circuits');
       }, 1500);
     } catch (error) {
-      alert(error.response.data.msg);
+      toast.error(error.response.data.msg);
     }
   };
 

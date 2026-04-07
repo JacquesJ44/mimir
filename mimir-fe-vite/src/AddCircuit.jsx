@@ -1,6 +1,7 @@
 import axios from "./AxiosInstance.js"; 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import toast from 'react-hot-toast';
 import { addMonths, subDays, parseISO, format, isValid, set } from 'date-fns';
 import SiteSelector from "./SiteSelector.jsx";
 
@@ -107,7 +108,7 @@ const AddCircuit = () => {
         e.preventDefault();
 
         if (!siteAId || !siteBId) {
-            alert("Please select valid Site A and Site B options.");
+            toast.error("Please select valid Site A and Site B options.");
             return;
         }
         
@@ -181,7 +182,7 @@ const AddCircuit = () => {
                     });
                 } catch (uploadErr) {
                     console.error('Upload failed:', uploadErr);
-                    alert('File upload failed (circuit was created).');
+                    toast.error('File upload failed (circuit was created).');
                 }
             }
 
@@ -192,10 +193,10 @@ const AddCircuit = () => {
             }, 1500);
         } catch (error) {
             if (error.response?.data?.error) {
-                alert(`Error: ${error.response.data.error}`);
+                toast.error(`Error: ${error.response.data.error}`);
             } else {
                 console.error('Form submission failed:', error);
-                alert('An unexpected error occurred.');
+                toast.error('An unexpected error occurred.');
             }
         }
     };
@@ -469,7 +470,7 @@ const AddCircuit = () => {
                                         <p>Margin: <strong>{(((Number(sellingPrice || 0) - Number(mrc || 0)) / Number(mrc || 1)) * 100).toFixed(2)}%</strong></p>
 
                                         <h3 className="text-md font-semibold mb-2 mt-5 text-gray-700 dark:text-gray-100">📝 Notes</h3>
-                                        <textarea className="textarea textarea-bordered w-full min-h-[200px]" placeholder="e.g., Make dat money yo" />
+                                        <textarea className="textarea textarea-bordered w-full min-h-52" placeholder="e.g., Make dat money yo" />
                                     </div>
                                 </div>
 

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Commission Approval Request</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f7f7f7;
+      color: #333;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 30px auto;
+      background-color: #ffffff;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      padding: 20px;
+    }
+    h2 {
+      color: #1f2937;
+      font-size: 20px;
+      margin-bottom: 10px;
+    }
+    p {
+      font-size: 14px;
+      line-height: 1.5;
+      margin-bottom: 15px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 15px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+      font-size: 14px;
+    }
+    th {
+      background-color: #f3f4f6;
+    }
+
+    /* Base button style */
+    a.btn-approve,
+    a.btn-reject {
+      display: inline-block;
+      padding: 0.5rem 1rem; /* DaisyUI-like padding */
+      border-radius: 0.375rem; /* Rounded corners */
+      font-weight: 600;
+      font-size: 0.875rem; /* text-sm */
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+      color: #fff; /* White text */
+      transition: background-color 0.2s ease-in-out;
+    }
+
+    /* Approve button (Green) */
+    .btn-approve {
+      background-color: #16a34a; /* Green-600 */
+    }
+    .btn-approve:hover {
+      background-color: #22c55e; /* Green-500 */
+    }
+
+    /* Reject button (Red) */
+    .btn-reject {
+      background-color: #dc2626; /* Red-600 */
+    }
+    .btn-reject:hover {
+      background-color: #ef4444; /* Red-500 */
+    }
+
+
+    .footer {
+      font-size: 12px;
+      color: #888;
+      margin-top: 20px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Commission Approval Request</h2>
+    <p>A commission has been submitted for approval. Please review the details below:</p>
+
+    <table>
+      <tr>
+        <th>Salesperson</th>
+        <td>{{ salesperson_name }}</td>
+      </tr>
+      <tr>
+        <th>Circuit Number</th>
+        <td>{{ circuit_number }}</td>
+      </tr>
+      <tr>
+        <th>Client</th>
+        <td>{{ client_name }}</td>
+      </tr>
+      <tr>
+        <th>GP (R)</th>
+        <td>{{ gp }}</td>
+      </tr>
+      <!-- <tr>
+        <th>Current Commission (%)</th>
+        <td>{{ old_commission_percentage }}</td>
+      </tr> -->
+      <tr>
+        <th>Requested Commission (%)</th>
+        <td>{{ commission_percentage }}</td>
+      <tr>
+      <tr>
+        <th>Commission Value (R)</th>
+        <td>{{ indicative_value }}</td>
+      <tr>
+        <th>Term (Months)</th>
+        <td>{{ months }}</td>
+      </tr>
+      <tr>
+        <th>Notes</th>
+        <td>{{ notes or '-' }}</td>
+      </tr>
+    </table>
+
+    <p>Please review the commission and <strong>approve or reject</strong> as appropriate:</p>
+    <p>This link is valid for <strong>7 days</strong>.</p>
+
+    <div style="text-align:center; margin-top:20px;">
+
+  <!-- Review button -->
+  <a href="{{ review_url }}"
+     style="
+       display:inline-block;
+       padding:12px 22px;
+       margin-bottom:20px;
+       background-color:#2563eb;
+       color:white;
+       font-weight:600;
+       font-size:14px;
+       text-decoration:none;
+       border-radius:6px;
+     ">
+      Review &amp; Approve / Reject
+  </a>
+
+</div>
+
+    <div class="footer">
+      This is an automated email from Mimir.
+    </div>
+  </div>
+</body>
+</html>

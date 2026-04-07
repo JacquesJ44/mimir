@@ -8,7 +8,7 @@ const LogsPage = () => {
     axios.get("/api/logs")
       .then((res) => {
         setLogs(res.data)
-        console.log("Fetched logs:", res.data);
+        // console.log("Fetched logs:", res.data);
   })
       .catch((err) => console.error(err));
   }, []);

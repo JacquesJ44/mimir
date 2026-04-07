@@ -1,6 +1,7 @@
 import axios from "./AxiosInstance.js";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import toast from 'react-hot-toast';
 
 const AddSite = () => {
 
@@ -32,9 +33,9 @@ const AddSite = () => {
             }, 1500);
         } catch (error) {
             if (error.response && error.response.data && error.response.data.msg) {
-                alert(error.response.data.msg);  // "Site already exists"
+                toast.error(error.response.data.msg);  // "Site already exists"
             } else {
-                alert("An unexpected error occurred.");
+                toast.error("An unexpected error occurred.");
             }
         }
       };

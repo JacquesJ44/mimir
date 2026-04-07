@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import axios from './AxiosInstance.js';
 import { jwtDecode } from 'jwt-decode';
+import toast from 'react-hot-toast';
 
 const Navbar = ({ token, setToken, message, setMessage }) => {
 
@@ -56,7 +57,7 @@ const Navbar = ({ token, setToken, message, setMessage }) => {
     const getLinksByRole = (role) => {
       switch (role) {
         case "technician":
-          return ["Circuits", "Sites"];
+          return ["Circuits", "Sites", "Commission"];
         case "finance":
           return ["Dashboard", "Commission"];
         case "sales":
@@ -82,7 +83,7 @@ const Navbar = ({ token, setToken, message, setMessage }) => {
           navigate('/login');
         } catch (err) {
           console.error('Logout failed:', err);
-          alert('Logout failed.');
+          toast.error('Logout failed.');
         }
       };
 
@@ -113,9 +114,9 @@ const Navbar = ({ token, setToken, message, setMessage }) => {
               {getLinksByRole(role).includes("Logs") && (
                 <li className="mx-2"><Link to="/logs">Logs</Link></li>
               )}
-              {/* {getLinksByRole(role).includes("Commission") && (
+              {getLinksByRole(role).includes("Commission") && (
                 <li className="mx-2"><Link to="/commission">Commission</Link></li>
-              )} */}
+              )}
               <li className="mx-2">
                 <button onClick={handleLogout} className="btn btn-outline btn-sm">Logout</button>
                 {message}

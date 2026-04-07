@@ -104,8 +104,16 @@ const Dashboard = () => {
     "N/A",
   ]);
 
+  const escapeCSV = (value) => {
+    const str = String(value ?? "");
+    if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+
   const csvContent =
-    [headers.join(","), ...rows.map((row) => row.join(","))].join("\n");
+    [headers.map(escapeCSV).join(","), ...rows.map((row) => row.map(escapeCSV).join(","))].join("\n");
 
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -303,7 +311,7 @@ const exportToPDF = () => {
       setSelectedVendor(vendor);
       setLoadingCircuits(true);
       
-      axios.get(`/api/dashboard/vendor/${vendor}`)
+      axios.get(`/api/dashboard/vendor/${encodeURIComponent(vendor)}`)
       .then((res) => {
         setVendorCircuits(res.data);
       })
@@ -359,6 +367,7 @@ const exportToPDF = () => {
         <h2 className="text-2xl font-bold mb-6">Circuits per Vendor and Type</h2>
 
         <div className="w-full h-[400px]">
+          {data.length > 0 && (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 50 }}> 
               <XAxis dataKey="vendor" tick={<CustomTick />} />
@@ -375,6 +384,7 @@ const exportToPDF = () => {
               ))}
             </BarChart>
           </ResponsiveContainer>
+          )}
         </div>
       </div>
 
@@ -403,10 +413,10 @@ const exportToPDF = () => {
                   <th>Selling Price</th>
                   <th>GP</th>
                   <th>GP %</th>
-                  <th>Sales Person</th>
-                  <th>Commission %</th>
-                  <th>Commission Value</th>
-                  <th>GP After Commission</th>
+                  {/* <th>Sales Person</th> */}
+                  {/* <th>Commission %</th> */}
+                  {/* <th>Commission Value</th> */}
+                  {/* <th>GP After Commission</th> */}
                 </tr>
               </thead>
               <tbody>
@@ -437,10 +447,10 @@ const exportToPDF = () => {
                       <td>{isClient && c.sellingPrice !== null ? `R${c.sellingPrice}` : 'N/A'}</td>
                       <td>{isClient && gp !== null ? `R${gp}` : 'N/A'}</td>
                       <td>{isClient && markup !== null ? `${markup}%` : 'N/A'}</td>
-                      <td>{isClient ? c.salesPerson || 'N/A' : 'N/A'}</td>
-                      <td>{isClient && c.commission !== null ? `${c.commission}%` : 'N/A'}</td>
-                      <td>{isClient && commissionValue !== null ? `R${commissionValue}` : 'N/A'}</td>
-                      <td>{isClient && gpAfterCommission !== null ? `R${gpAfterCommission}` : 'N/A'}</td>
+                      {/* <td>{isClient ? c.salesPerson || 'N/A' : 'N/A'}</td> */}
+                      {/* <td>{isClient && c.commission !== null ? `${c.commission}%` : 'N/A'}</td> */}
+                      {/* <td>{isClient && commissionValue !== null ? `R${commissionValue}` : 'N/A'}</td> */}
+                      {/* <td>{isClient && gpAfterCommission !== null ? `R${gpAfterCommission}` : 'N/A'}</td> */}
                     </tr>
                   );
                 })}
@@ -493,8 +503,8 @@ const exportToPDF = () => {
                       return `${totalMarkup.toFixed(1)}%`;
                     })()}
                   </td>
-                  <td>R{calculateTotalCommission().toFixed(2)}</td>
-                  <td>R{calculateTotalGpAfterCommission().toFixed(2)}</td>
+                  {/* <td>R{calculateTotalCommission().toFixed(2)}</td> */}
+                  {/* <td>R{calculateTotalGpAfterCommission().toFixed(2)}</td> */}
                 </tr>
 
                 {/* Total - Internal */}
