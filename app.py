@@ -113,7 +113,7 @@ app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT'))
 app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS') == 'True'
 app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
-app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_USERNAME')
+app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER')
 app.config['MANAGER_EMAIL'] = os.getenv('MANAGER_EMAIL')
 app.config['SUPPORT_EMAIL'] = os.getenv('SUPPORT_EMAIL')
 app.config['FINANCE_EMAIL'] = os.getenv('FINANCE_EMAIL')
