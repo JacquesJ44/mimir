@@ -49,19 +49,19 @@ const EarningsTable = ({
                       {`${e.user_name || ""} ${e.user_surname || ""}`.trim() ||
                         "-"}
                     </td>
-                    <td className="text-right whitespace-nowrap">
+                    <td>
                       {e.circuit_number || "-"}
                     </td>
-                    <td className="text-right whitespace-nowrap">
+                    <td>
                       {e.client_name || "-"}
                     </td>
-                    <td className="text-right whitespace-nowrap">
+                    <td>
                       {e.active_days || "-"}
                     </td>
-                    <td className="text-right whitespace-nowrap">
+                    <td>
                       {e.period_end || "-"}
                     </td>
-                    <td className="text-right whitespace-nowrap">
+                    <td>
                       <div
                         className="tooltip tooltip-left"
                         data-tip={`Ledger ID: ${e.id}`}
@@ -131,7 +131,7 @@ const EarningsTable = ({
             </tbody>
             <tfoot className="bg-gray-100 dark:bg-gray-700">
               <tr className="font-semibold border-t">
-                <td colSpan="9" className="text-right pr-4">
+                <td colSpan="8" className="text-right pr-4">
                   Total Earned
                 </td>
                 <td>R {totalEarned.toFixed(2)}</td>

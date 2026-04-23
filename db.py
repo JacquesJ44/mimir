@@ -449,7 +449,7 @@ class DbUtil:
                     SELECT id, user_id, action, target_table, target_id, ip_address, timestamp, details
                     FROM user_logs
                     ORDER BY timestamp DESC
-                    LIMIT 100
+                    LIMIT 300
                 """
                 c.execute(query)
                 logs = c.fetchall()

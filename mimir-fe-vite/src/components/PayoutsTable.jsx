@@ -49,19 +49,19 @@ const PayoutsTable = ({ filteredPayouts, statusColors, totalsByStatus }) => {
                     <tr key={rowKey}>
                       <td>{p.id}</td>
                       <td>{fullName}</td>
-                      <td className="text-right whitespace-nowrap">
+                      <td>
                         {p.circuit_number || "-"}
                       </td>
-                      <td className="text-right whitespace-nowrap">
+                      <td>
                         {p.client_name || "-"}
                       </td>
-                      <td className="text-right whitespace-nowrap">
+                      <td>
                         {p.active_days ?? "-"}
                       </td>
-                      <td className="text-right whitespace-nowrap">
+                      <td>
                         {p.period_end || "-"}
                       </td>
-                      <td className="text-right whitespace-nowrap">
+                      <td>
                         {p.entry_type || "-"}
                       </td>
                       <td
@@ -80,7 +80,7 @@ const PayoutsTable = ({ filteredPayouts, statusColors, totalsByStatus }) => {
                   );
                 })}
               </tbody>
-              <tfoot className="bg-gray-50 font-semibold border-t">
+              <tfoot className="bg-gray-100 dark:bg-gray-700">
                 <tr>
                   <td colSpan="5" className="text-right pr-4">
                     Totals
